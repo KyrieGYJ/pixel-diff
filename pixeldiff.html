@@ -1,0 +1,1079 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PixelDiff — 图片对比工具</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;600&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<!--
+  LAYOUT (Beyond Compare style):
+  ┌──────────────┬──────────────┐  ← .top-row  (resizable via splitter)
+  │   图片 A      │   图片 B      │    图片保持干净，无任何叠加
+  ├──────────────┴──────────────┤  ← .splitter (可拖动调整上下高度比)
+  │         差异图 (Diff)        │  ← .bot-row  (独立面板，单独渲染差异)
+  └─────────────────────────────┘
+-->
+
+<!-- ═══════════════════════ CSS MODULE 1: variables ═══════════════════════ -->
+<style id="css-variables">
+:root {
+  --bg:#0a0a0f; --surface:#111118; --surface2:#1a1a24; --border:#2a2a3a;
+  --accent:#00e5a0; --accent2:#ff4d6d; --accent3:#7b61ff;
+  --text:#e8e8f0; --text-dim:#6a6a8a; --radius:6px;
+  --font-mono:'JetBrains Mono',monospace; --font-ui:'Syne',sans-serif;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:var(--font-ui);height:100vh;overflow:hidden;display:flex;flex-direction:column;}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;background-image:linear-gradient(rgba(0,229,160,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(0,229,160,.025) 1px,transparent 1px);background-size:32px 32px;}
+.hidden{display:none!important;}
+</style>
+
+<!-- ═══════════════════════ CSS MODULE 2: toolbar ════════════════════════ -->
+<style id="css-toolbar">
+header{position:relative;z-index:10;flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:9px 20px;border-bottom:1px solid var(--border);background:rgba(10,10,15,.92);backdrop-filter:blur(12px);}
+.logo{display:flex;align-items:center;gap:8px;font-size:16px;font-weight:800;letter-spacing:-.5px;}
+.logo-icon{width:24px;height:24px;border-radius:5px;background:linear-gradient(135deg,var(--accent),var(--accent3));display:flex;align-items:center;justify-content:center;font-size:11px;}
+.header-stats{display:flex;gap:16px;align-items:center;font-family:var(--font-mono);font-size:11px;color:var(--text-dim);}
+.stat-item{display:flex;align-items:center;gap:5px;}
+.stat-dot{width:5px;height:5px;border-radius:50%;background:var(--accent);flex-shrink:0;}
+.stat-dot.red{background:var(--accent2);} .stat-dot.purple{background:var(--accent3);}
+.stat-val{color:var(--text);font-weight:600;}
+.toolbar{position:relative;z-index:10;flex-shrink:0;display:flex;align-items:center;padding:0 6px;border-bottom:1px solid var(--border);background:var(--surface);overflow-x:auto;}
+.toolbar::-webkit-scrollbar{height:2px;} .toolbar::-webkit-scrollbar-thumb{background:var(--border);}
+.ctrl-group{display:flex;align-items:center;gap:6px;padding:6px 12px;border-right:1px solid var(--border);flex-shrink:0;}
+.ctrl-group:last-child{border-right:none;}
+.ctrl-label{font-size:9px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:1.2px;white-space:nowrap;}
+.mode-tabs{display:flex;border-radius:var(--radius);overflow:hidden;border:1px solid var(--border);}
+.mode-tab{font-family:var(--font-ui);font-size:10px;font-weight:700;text-transform:uppercase;padding:4px 10px;border:none;background:var(--surface2);color:var(--text-dim);cursor:pointer;transition:all .15s;letter-spacing:.5px;}
+.mode-tab.active{background:var(--accent);color:var(--bg);}
+input[type=range]{-webkit-appearance:none;width:100px;height:3px;background:var(--border);border-radius:2px;outline:none;}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:var(--accent);cursor:pointer;box-shadow:0 0 7px rgba(0,229,160,.45);}
+.val-badge{font-family:var(--font-mono);font-size:10px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;padding:2px 6px;color:var(--accent);min-width:36px;text-align:center;flex-shrink:0;}
+.btn{font-family:var(--font-ui);font-size:10px;font-weight:700;padding:4px 10px;border-radius:var(--radius);border:1px solid var(--border);background:var(--surface2);color:var(--text);cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:4px;white-space:nowrap;}
+.btn:hover{border-color:var(--accent);color:var(--accent);}
+.btn.active{background:var(--accent);color:var(--bg);border-color:var(--accent);}
+select.sel{font-family:var(--font-ui);font-size:10px;background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:4px 7px;border-radius:var(--radius);cursor:pointer;}
+</style>
+
+<!-- ═══════════════════════ CSS MODULE 3: 3-panel layout ═════════════════ -->
+<style id="css-layout">
+.workspace{flex:1;display:flex;flex-direction:column;overflow:hidden;position:relative;z-index:1;min-height:0;}
+
+/* Top row: image A + B */
+.top-row{display:grid;grid-template-columns:1fr 1fr;flex-shrink:0;overflow:hidden;min-height:60px;}
+.top-row.slider-mode{grid-template-columns:1fr;}
+
+/* Splitter */
+.splitter{flex-shrink:0;height:7px;background:var(--surface2);border-top:1px solid var(--border);border-bottom:1px solid var(--border);cursor:row-resize;display:flex;align-items:center;justify-content:center;user-select:none;transition:background .15s;position:relative;z-index:20;}
+.splitter:hover,.splitter.dragging{background:rgba(0,229,160,.12);}
+.splitter-grip{width:48px;height:3px;border-radius:2px;background:var(--border);pointer-events:none;transition:background .15s;}
+.splitter:hover .splitter-grip,.splitter.dragging .splitter-grip{background:var(--accent);}
+
+/* Bot row: diff */
+.bot-row{flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:40px;}
+
+/* Shared panel chrome */
+.panel{position:relative;overflow:hidden;border-right:1px solid var(--border);display:flex;flex-direction:column;min-height:0;}
+.panel:last-child{border-right:none;}
+.panel-header{flex-shrink:0;display:flex;align-items:center;justify-content:space-between;padding:5px 11px;background:var(--surface);border-bottom:1px solid var(--border);font-size:9px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:1px;}
+.panel-title{display:flex;align-items:center;gap:6px;}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0;}
+.dot.red{background:var(--accent2);} .dot.purple{background:var(--accent3);}
+.panel-info{font-family:var(--font-mono);font-size:10px;color:var(--text-dim);}
+
+/* Drop zone */
+.drop-zone{flex:1;position:relative;cursor:pointer;overflow:hidden;display:flex;align-items:center;justify-content:center;background:var(--surface);transition:background .2s;min-height:0;}
+.drop-zone.dragover{background:rgba(0,229,160,.06);}
+.drop-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;z-index:2;}
+.drop-prompt{display:flex;flex-direction:column;align-items:center;gap:10px;pointer-events:none;padding:16px;}
+.drop-icon{width:52px;height:52px;border:2px dashed var(--border);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;color:var(--text-dim);transition:border-color .2s,color .2s;}
+.drop-zone:hover .drop-icon{border-color:var(--accent);color:var(--accent);}
+.drop-prompt p{font-size:11px;color:var(--text-dim);text-align:center;line-height:1.6;}
+.drop-prompt strong{color:var(--text);}
+
+/* Image viewer (checkerboard, clean — NO canvas overlay) */
+.img-view{flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;min-height:0;position:relative;
+  cursor:grab;background:repeating-conic-gradient(#1e1e28 0% 25%,#16161e 0% 50%) 0 0/18px 18px;}
+.img-view.panning{cursor:grabbing;}
+.img-view img{image-rendering:pixelated;display:block;position:relative;z-index:1;transition:width .05s,height .05s;pointer-events:none;}
+/* Drag-only overlay: sits on top of img but pointer-events only for drag, never click */
+.drag-overlay{position:absolute;inset:0;z-index:2;pointer-events:none;}
+.drag-overlay.dragover{background:rgba(0,229,160,.08);outline:2px dashed var(--accent);outline-offset:-2px;}
+
+/* Diff canvas area (bot panel body) */
+.diff-body{flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;min-height:0;
+  cursor:grab;background:repeating-conic-gradient(#1e1e28 0% 25%,#16161e 0% 50%) 0 0/18px 18px;}
+.diff-body.panning{cursor:grabbing;}
+.diff-body canvas{image-rendering:pixelated;display:block;transition:width .05s,height .05s;pointer-events:none;}
+.diff-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--text-dim);font-size:12px;pointer-events:none;}
+.diff-empty-icon{font-size:30px;opacity:.35;}
+
+/* Stats bar */
+.stats-bar{flex-shrink:0;display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:5px 16px;border-top:1px solid var(--border);background:var(--surface);font-family:var(--font-mono);font-size:10px;}
+.metric{display:flex;align-items:center;gap:5px;}
+.metric-swatch{width:7px;height:7px;border-radius:2px;flex-shrink:0;}
+.metric-label{color:var(--text-dim);}
+.metric-val{font-weight:600;font-size:10px;}
+.metric-val.good{color:var(--accent);} .metric-val.warn{color:#ffd166;} .metric-val.bad{color:var(--accent2);}
+.stats-sep{width:1px;height:12px;background:var(--border);flex-shrink:0;}
+
+/* Zoom */
+.zoom-controls{position:absolute;bottom:8px;right:8px;z-index:20;display:flex;gap:3px;}
+.zoom-btn{width:22px;height:22px;border-radius:4px;background:rgba(10,10,15,.88);border:1px solid var(--border);color:var(--text);cursor:pointer;font-size:13px;display:flex;align-items:center;justify-content:center;transition:border-color .15s,color .15s;}
+.zoom-btn:hover{border-color:var(--accent);color:var(--accent);}
+
+/* Slider compare — canvas-based, no object-fit issues */
+.slider-wrap{flex:1;position:relative;overflow:hidden;cursor:col-resize;min-height:0;
+  background:repeating-conic-gradient(#1e1e28 0% 25%,#16161e 0% 50%) 0 0/18px 18px;}
+/* Single canvas fills container exactly */
+#slider-canvas{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;}
+.cs-divider{position:absolute;top:0;width:1px;height:100%;background:var(--accent);z-index:10;
+  box-shadow:0 0 4px var(--accent);transform:translateX(-50%);pointer-events:none;}
+/* Handle: hidden by default, fade in when mouse is near the divider line */
+.cs-handle{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+  width:10px;height:18px;border-radius:5px;
+  background:rgba(10,10,15,.8);border:1px solid var(--accent);
+  display:flex;align-items:center;justify-content:center;
+  font-size:7px;color:var(--accent);font-weight:700;
+  box-shadow:0 0 6px rgba(0,229,160,.35);letter-spacing:-1px;
+  opacity:0;transition:opacity .2s;}
+.cs-divider.near .cs-handle{opacity:1;}
+
+/* Toast */
+.toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--surface2);border:1px solid var(--accent);color:var(--text);padding:7px 16px;border-radius:7px;font-size:11px;z-index:2000;box-shadow:0 0 20px rgba(0,229,160,.18);animation:fadeUp .2s ease;pointer-events:none;}
+@keyframes fadeUp{from{opacity:0;transform:translate(-50%,8px);}to{opacity:1;transform:translate(-50%,0);}}
+</style>
+
+<!-- ═══════════════════════ CSS MODULE 4: pixel-probe ════════════════════ -->
+<style id="css-probe">
+/* Crosshair cursor on image views when images loaded */
+.img-view.probing { cursor:crosshair; }
+
+/* Probe HUD: docked to bottom of top-row, between the two panels */
+.probe-bar {
+  flex-shrink:0;
+  display:none; /* shown by JS when both images loaded */
+  align-items:stretch;
+  border-top:1px solid var(--border);
+  background:var(--surface);
+  font-family:var(--font-mono);
+  font-size:10px;
+  height:92px;
+  position:relative;
+  z-index:15;
+}
+.probe-bar.visible { display:flex; }
+
+/* Left side: coord + magnifiers */
+.probe-left {
+  display:flex; align-items:center; gap:10px;
+  padding:8px 14px; border-right:1px solid var(--border);
+  flex-shrink:0; min-width:300px;
+}
+.probe-coord {
+  display:flex; flex-direction:column; gap:3px;
+  min-width:100px;
+}
+.probe-coord-label { font-size:9px; color:var(--text-dim); text-transform:uppercase; letter-spacing:.8px; }
+.probe-coord-val { font-size:12px; color:var(--accent); font-weight:600; letter-spacing:.5px; }
+
+/* Magnifier canvas pair */
+.probe-mags { display:flex; gap:8px; align-items:center; }
+.probe-mag-wrap { display:flex; flex-direction:column; gap:2px; align-items:center; }
+.probe-mag-label { font-size:8px; color:var(--text-dim); text-transform:uppercase; }
+.probe-mag-canvas {
+  width:64px; height:64px;
+  border:1px solid var(--border);
+  border-radius:4px;
+  image-rendering:pixelated;
+  background:#111;
+  cursor:crosshair;
+}
+/* Green crosshair dot on magnifier center */
+.probe-mag-wrap { position:relative; }
+.probe-mag-wrap::after {
+  content:'';
+  position:absolute;
+  bottom:calc(50% - 5px); left:50%; transform:translateX(-50%);
+  width:3px; height:3px; border-radius:50%;
+  background:var(--accent);
+  pointer-events:none;
+  box-shadow:0 0 4px var(--accent);
+}
+
+/* Right side: RGBA readout for A and B */
+.probe-pixels {
+  display:flex; flex:1; align-items:stretch;
+}
+.probe-pixel-col {
+  flex:1; display:flex; flex-direction:column; justify-content:center; gap:5px;
+  padding:8px 14px; border-right:1px solid var(--border);
+}
+.probe-pixel-col:last-child { border-right:none; }
+.probe-pixel-title {
+  font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.8px;
+  display:flex; align-items:center; gap:5px;
+}
+.probe-pixel-swatch {
+  width:10px; height:10px; border-radius:2px; border:1px solid rgba(255,255,255,.12);
+  flex-shrink:0;
+}
+.probe-pixel-rgb {
+  font-size:11px; color:var(--text); letter-spacing:.3px;
+}
+.probe-pixel-hex {
+  font-size:10px; color:var(--text-dim);
+}
+.probe-pixel-delta {
+  font-size:10px; color:var(--accent3);
+}
+.probe-pixel-delta.diff { color:var(--accent2); }
+
+/* Hover crosshair overlay on image panels (drawn with pointer-events:none) */
+.crosshair-overlay {
+  position:absolute; inset:0; pointer-events:none; z-index:10;
+}
+</style>
+</head>
+<body>
+
+<!-- ════════════════ HEADER ════════════════ -->
+<header>
+  <div class="logo"><div class="logo-icon">⚡</div>PixelDiff</div>
+  <div class="header-stats" id="header-stats">
+    <div class="stat-item"><div class="stat-dot"></div><span>加载两张图片开始对比</span></div>
+  </div>
+</header>
+
+<!-- ════════════════ TOOLBAR ════════════════ -->
+<div class="toolbar">
+  <div class="ctrl-group">
+    <span class="ctrl-label">视图</span>
+    <div class="mode-tabs">
+      <button class="mode-tab active" data-mode="side">并排</button>
+      <button class="mode-tab" data-mode="slider">滑动</button>
+    </div>
+  </div>
+  <div class="ctrl-group">
+    <span class="ctrl-label">容差</span>
+    <input type="range" id="tol-slider" min="0" max="255" value="10">
+    <span class="val-badge" id="tol-val">10</span>
+  </div>
+  <div class="ctrl-group">
+    <span class="ctrl-label">标记色</span>
+    <select class="sel" id="hl-color">
+      <option value="red">红色</option>
+      <option value="cyan">青色</option>
+      <option value="yellow">黄色</option>
+      <option value="magenta">品红</option>
+      <option value="heat">热力图</option>
+    </select>
+  </div>
+  <div class="ctrl-group">
+    <span class="ctrl-label">透明度</span>
+    <input type="range" id="overlay-opacity" min="0" max="100" value="80" step="5">
+    <span class="val-badge" id="ov-val">80%</span>
+  </div>
+  <div class="ctrl-group">
+    <button class="btn" id="btn-ignore-aa">抗锯齿 <span id="aa-state">关</span></button>
+    <button class="btn" id="btn-gray-same">灰显相同</button>
+    <button class="btn" id="btn-swap">⇄ 交换</button>
+  </div>
+  <div class="ctrl-group">
+    <button class="btn" id="btn-export-diff">⬇ 导出差异图</button>
+    <button class="btn" id="btn-copy-stats">复制统计</button>
+  </div>
+</div>
+
+<!-- ════════════════ WORKSPACE ════════════════ -->
+<div class="workspace" id="workspace">
+
+  <!-- TOP ROW: 图片 A（左）+ 图片 B（右），纯净无叠加 -->
+  <div class="top-row" id="top-row" style="height:52%">
+
+    <!-- Panel A -->
+    <div class="panel" id="panel-a">
+      <div class="panel-header">
+        <div class="panel-title"><div class="dot"></div>图片 A</div>
+        <label class="btn" style="cursor:pointer;margin-left:auto">
+          📂 打开<input type="file" accept="image/*" id="file-a" style="display:none">
+        </label>
+        <span class="panel-info" id="info-a" style="margin-left:8px">未加载</span>
+      </div>
+      <div class="img-view" id="view-a">
+        <div class="drop-prompt" id="prompt-a">
+          <div class="drop-icon">🖼</div>
+          <p>拖拽图片到此处，或点击<strong>"打开"</strong></p>
+          <p style="font-size:10px">PNG · JPG · WEBP · BMP</p>
+        </div>
+        <img id="img-a" alt="A" class="hidden">
+        <!-- drag-only overlay: captures drag events but NOT click -->
+        <div class="drag-overlay" id="drag-a"></div>
+      </div>
+      <div class="zoom-controls">
+        <button class="zoom-btn" onclick="__zoom('a',1.25)">+</button>
+        <button class="zoom-btn" onclick="__zoom('a',.8)">−</button>
+        <button class="zoom-btn" onclick="__zoom('a',0)">⊡</button>
+      </div>
+    </div>
+
+    <!-- Panel B -->
+    <div class="panel" id="panel-b">
+      <div class="panel-header">
+        <div class="panel-title"><div class="dot red"></div>图片 B</div>
+        <label class="btn" style="cursor:pointer;margin-left:auto">
+          📂 打开<input type="file" accept="image/*" id="file-b" style="display:none">
+        </label>
+        <span class="panel-info" id="info-b" style="margin-left:8px">未加载</span>
+      </div>
+      <div class="img-view" id="view-b">
+        <div class="drop-prompt" id="prompt-b">
+          <div class="drop-icon">🖼</div>
+          <p>拖拽图片到此处，或点击<strong>"打开"</strong></p>
+          <p style="font-size:10px">PNG · JPG · WEBP · BMP</p>
+        </div>
+        <img id="img-b" alt="B" class="hidden">
+        <!-- drag-only overlay -->
+        <div class="drag-overlay" id="drag-b"></div>
+      </div>
+      <div class="zoom-controls">
+        <button class="zoom-btn" onclick="__zoom('b',1.25)">+</button>
+        <button class="zoom-btn" onclick="__zoom('b',.8)">−</button>
+        <button class="zoom-btn" onclick="__zoom('b',0)">⊡</button>
+      </div>
+    </div>
+
+    <!-- Slider panel (replaces A+B in slider mode) -->
+    <div class="panel hidden" id="panel-slider">
+      <div class="panel-header">
+        <div class="panel-title"><div class="dot purple"></div>滑动对比</div>
+        <span class="panel-info">左右拖动分割线</span>
+      </div>
+      <div class="slider-wrap" id="slider-wrap">
+        <canvas id="slider-canvas"></canvas>
+        <div class="cs-divider" id="cs-divider" style="left:50%"><div class="cs-handle">◁▷</div></div>
+      </div>
+    </div>
+
+  </div><!-- /top-row -->
+  <!-- PROBE BAR: pixel info HUD docked between top-row and splitter -->
+  <div class="probe-bar" id="probe-bar">
+    <div class="probe-left">
+      <div class="probe-coord">
+        <span class="probe-coord-label">坐标 (X, Y)</span>
+        <span class="probe-coord-val" id="probe-xy">—</span>
+        <span class="probe-coord-label" style="margin-top:4px">ΔMax</span>
+        <span class="probe-coord-val" id="probe-delta" style="color:var(--text-dim)">—</span>
+      </div>
+      <div class="probe-mags">
+        <div class="probe-mag-wrap">
+          <span class="probe-mag-label">A</span>
+          <canvas class="probe-mag-canvas" id="mag-a" width="64" height="64"></canvas>
+        </div>
+        <div class="probe-mag-wrap">
+          <span class="probe-mag-label">B</span>
+          <canvas class="probe-mag-canvas" id="mag-b" width="64" height="64"></canvas>
+        </div>
+      </div>
+    </div>
+    <div class="probe-pixels">
+      <div class="probe-pixel-col">
+        <div class="probe-pixel-title"><div class="dot" style="background:var(--accent)"></div>图片 A<div class="probe-pixel-swatch" id="swatch-a"></div></div>
+        <div class="probe-pixel-rgb" id="probe-rgb-a">RGB: —</div>
+        <div class="probe-pixel-hex" id="probe-hex-a">HEX: —</div>
+        <div class="probe-pixel-hex" id="probe-alpha-a">Alpha: —</div>
+        <div class="probe-pixel-hex" id="probe-luma-a">Y: —</div>
+      </div>
+      <div class="probe-pixel-col">
+        <div class="probe-pixel-title"><div class="dot red"></div>图片 B<div class="probe-pixel-swatch" id="swatch-b"></div></div>
+        <div class="probe-pixel-rgb" id="probe-rgb-b">RGB: —</div>
+        <div class="probe-pixel-hex" id="probe-hex-b">HEX: —</div>
+        <div class="probe-pixel-hex" id="probe-alpha-b">Alpha: —</div>
+        <div class="probe-pixel-hex" id="probe-luma-b">Y: —</div>
+      </div>
+      <div class="probe-pixel-col" style="flex:0.8;">
+        <div class="probe-pixel-title" style="color:var(--accent3)">Δ 差值</div>
+        <div class="probe-pixel-rgb" id="probe-diff-rgb" style="color:var(--text-dim)">ΔR ΔG ΔB: —</div>
+        <div class="probe-pixel-delta" id="probe-diff-max">ΔMax: —</div>
+        <div class="probe-pixel-delta" id="probe-diff-de">ΔE: —</div>
+        <div class="probe-pixel-delta" id="probe-diff-dy">ΔY: —</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SPLITTER: drag to resize top/bottom -->
+  <div class="splitter" id="splitter"><div class="splitter-grip"></div></div>
+
+  <!-- BOT ROW: 差异图 — completely separate, no overlap with A or B -->
+  <div class="bot-row">
+    <div class="panel" style="border-right:none;flex:1;">
+      <div class="panel-header">
+        <div class="panel-title"><div class="dot red"></div>差异图</div>
+        <span class="panel-info" id="diff-info">等待图片加载…</span>
+      </div>
+      <!-- Diff canvas: renders the computed diff ImageData here and only here -->
+      <div class="diff-body" id="diff-body">
+        <div class="diff-empty" id="diff-empty">
+          <div class="diff-empty-icon">⬡</div>
+          <span>加载两张图片后自动生成差异图</span>
+        </div>
+        <canvas id="diff-canvas" class="hidden"></canvas>
+      </div>
+      <!-- Stats bar inside bot panel -->
+      <div class="stats-bar hidden" id="stats-bar">
+        <div class="metric"><div class="metric-swatch" style="background:var(--accent2)"></div><span class="metric-label">差异像素:</span><span class="metric-val bad" id="stat-diff-px">—</span></div>
+        <div class="metric"><div class="metric-swatch" style="background:var(--accent3)"></div><span class="metric-label">差异比例:</span><span class="metric-val" id="stat-diff-pct">—</span></div>
+        <div class="stats-sep"></div>
+        <div class="metric"><div class="metric-swatch" style="background:var(--accent)"></div><span class="metric-label">相似度:</span><span class="metric-val good" id="stat-sim">—</span></div>
+        <div class="metric"><span class="metric-label">平均ΔE:</span><span class="metric-val" id="stat-de">—</span></div>
+        <div class="stats-sep"></div>
+        <div class="metric"><span class="metric-label">容差:</span><span class="metric-val" id="stat-tol">10</span></div>
+        <div class="metric"><span class="metric-label">分辨率:</span><span class="metric-val" id="stat-res">—</span></div>
+        <div class="metric" style="margin-left:auto"><span class="metric-label">尺寸匹配:</span><span class="metric-val" id="stat-match">—</span></div>
+      </div>
+    </div>
+  </div><!-- /bot-row -->
+
+</div><!-- /workspace -->
+
+
+<!-- ═══════════════════════ JS MODULE 1: state.js ════════════════════════ -->
+<script id="js-state">
+const State=(()=>{
+  const s={imgA:null,imgB:null,dataA:null,dataB:null,tolerance:10,mode:'side',overlayOpacity:.8,ignoreAA:false,graySame:false,hlColor:'red',diffResult:null};
+  function getHlColor(m,i){
+    switch(m){case'cyan':return[0,230,255];case'yellow':return[255,220,0];case'magenta':return[255,0,200];case'heat':{const t=Math.min(i/255,1);return[255,Math.round(220*(1-t)),0];}default:return[255,60,80];}
+  }
+  return{s,getHlColor};
+})();
+</script>
+
+<!-- ═══════════════════════ JS MODULE 2: diff.js ═════════════════════════ -->
+<script id="js-diff">
+const DiffEngine=(()=>{
+  function run(){
+    const{s,getHlColor}=State,a=s.dataA,b=s.dataB;if(!a||!b)return;
+    const wA=a.width,hA=a.height,wB=b.width,hB=b.height,w=Math.max(wA,wB),h=Math.max(hA,hB);
+    const out=new ImageData(w,h),od=out.data,ad=a.data,bd=b.data;
+    let diffCount=0,totalDE=0;
+    for(let y=0;y<h;y++)for(let x=0;x<w;x++){
+      const io=(y*w+x)*4,inA=x<wA&&y<hA,inB=x<wB&&y<hB;
+      if(!inA||!inB){od[io]=80;od[io+1]=80;od[io+2]=80;od[io+3]=255;diffCount++;continue;}
+      const ia=(y*wA+x)*4,ib=(y*wB+x)*4;
+      const rA=ad[ia],gA=ad[ia+1],bA=ad[ia+2],aA=ad[ia+3],rB=bd[ib],gB=bd[ib+1],bB=bd[ib+2],aB=bd[ib+3];
+      const dr=Math.abs(rA-rB),dg=Math.abs(gA-gB),dbr=Math.abs(bA-bB),da=Math.abs(aA-aB),maxD=Math.max(dr,dg,dbr,da);
+      totalDE+=Math.sqrt(dr*dr+dg*dg+dbr*dbr)/Math.sqrt(3*255*255)*100;
+      if(maxD>s.tolerance){
+        if(s.ignoreAA&&isAA(ad,x,y,wA,hA)){writeSame(od,io,rA,gA,bA,s.graySame);}
+        else{diffCount++;const[hr,hg,hb]=getHlColor(s.hlColor,maxD);const al=Math.min(255,Math.round(s.overlayOpacity*255));od[io]=hr;od[io+1]=hg;od[io+2]=hb;od[io+3]=al;}
+      }else writeSame(od,io,rA,gA,bA,s.graySame);
+    }
+    const tot=w*h;
+    s.diffResult={out,w,h,diffCount,pct:(diffCount/tot*100).toFixed(2),sim:(100-diffCount/tot*100).toFixed(2),avgDE:(totalDE/tot).toFixed(1)};
+    return s.diffResult;
+  }
+  function writeSame(od,io,r,g,b,gray){if(gray){const v=Math.round((r+g+b)/3);od[io]=v;od[io+1]=v;od[io+2]=v;od[io+3]=70;}else{od[io]=40;od[io+1]=80;od[io+2]=200;od[io+3]=180;}}
+  function isAA(data,x,y,w,h){const th=32,i0=(y*w+x)*4;for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){if(!dx&&!dy)continue;const nx=x+dx,ny=y+dy;if(nx<0||ny<0||nx>=w||ny>=h)continue;if(Math.abs(data[(ny*w+nx)*4]-data[i0])>th)return true;}return false;}
+  return{run};
+})();
+</script>
+
+<!-- ═══════════════════════ JS MODULE 3: render.js ═══════════════════════ -->
+<script id="js-render">
+const Render=(()=>{
+  /** Draw diff result into the BOTTOM diff canvas — not into panel A/B */
+  function diffCanvas(){
+    const r=State.s.diffResult;if(!r)return;
+    const canvas=document.getElementById('diff-canvas'),empty=document.getElementById('diff-empty');
+    canvas.width=r.w;canvas.height=r.h;
+    // Setting canvas.width clears style; re-apply zoom scale after
+    canvas.style.width=''; canvas.style.height='';
+    const ctx=canvas.getContext('2d');
+    ctx.fillStyle='#0d0d12';ctx.fillRect(0,0,r.w,r.h);
+    ctx.putImageData(r.out,0,0);
+    canvas.classList.remove('hidden');
+    empty.classList.add('hidden');
+    document.getElementById('diff-info').textContent=`${r.w}×${r.h} · 容差 ${State.s.tolerance}`;
+    // Re-apply current zoom scale to the freshly sized canvas
+    if(typeof Utils!=='undefined') Utils._reapply();
+  }
+  function all(){diffCanvas();}
+  return{all,diffCanvas};
+})();
+</script>
+
+<!-- ═══════════════════════ JS MODULE 4: stats.js ════════════════════════ -->
+<script id="js-stats">
+const Stats=(()=>{
+  function update(){
+    const{s}=State,r=s.diffResult;if(!r)return;
+    const $=id=>document.getElementById(id);
+    $('stats-bar').classList.remove('hidden');
+    $('stat-diff-px').textContent=r.diffCount.toLocaleString();
+    setMV($('stat-diff-pct'),r.pct+'%',r.pct);
+    setMV($('stat-sim'),r.sim+'%',100-parseFloat(r.pct));
+    $('stat-de').textContent=r.avgDE;
+    $('stat-res').textContent=r.w+'×'+r.h;
+    $('stat-tol').textContent=s.tolerance;
+    const match=s.dataA.width===s.dataB.width&&s.dataA.height===s.dataB.height;
+    const el=$('stat-match');el.textContent=match?'✓ 匹配':'✗ 不同';el.className='metric-val '+(match?'good':'warn');
+    $('header-stats').innerHTML=`<div class="stat-item"><div class="stat-dot red"></div><span>差异: </span><span class="stat-val">${r.diffCount.toLocaleString()} px</span></div><div class="stat-item"><div class="stat-dot"></div><span>相似度: </span><span class="stat-val">${r.sim}%</span></div><div class="stat-item"><div class="stat-dot purple"></div><span>ΔE: </span><span class="stat-val">${r.avgDE}</span></div>`;
+  }
+  function setMV(el,text,value){el.textContent=text;const v=parseFloat(value);el.className='metric-val '+(v<1?'good':v<5?'warn':'bad');}
+  return{update};
+})();
+</script>
+
+<!-- ═══════════════════════ JS MODULE 5: loader.js ═══════════════════════ -->
+<script id="js-loader">
+const Loader=(()=>{
+  function init(){
+    // File-picker via header button (no click on image area)
+    document.getElementById('file-a').addEventListener('change', e => load(e.target.files[0], 'a'));
+    document.getElementById('file-b').addEventListener('change', e => load(e.target.files[0], 'b'));
+    // Drag-drop via transparent overlays (no pointer click passthrough)
+    setupDrag('drag-a', 'a');
+    setupDrag('drag-b', 'b');
+  }
+  function setupDrag(overlayId, side) {
+    // Listen on the img-view parent — it always has pointer-events and won't block mousemove
+    const overlay = document.getElementById(overlayId);
+    const view = overlay.parentElement; // .img-view
+    view.addEventListener('dragenter', e => { e.preventDefault(); overlay.classList.add('dragover'); });
+    view.addEventListener('dragover',  e => { e.preventDefault(); });
+    view.addEventListener('dragleave', e => {
+      // Only remove if leaving the view itself (not a child)
+      if (!view.contains(e.relatedTarget)) overlay.classList.remove('dragover');
+    });
+    view.addEventListener('drop', e => {
+      e.preventDefault();
+      overlay.classList.remove('dragover');
+      const file = e.dataTransfer.files[0];
+      if (file) load(file, side);
+    });
+  }
+  function load(file,side){
+    if(!file||!file.type.startsWith('image/'))return;
+    const reader=new FileReader();
+    reader.onload=e=>{const img=new Image();img.onload=()=>apply(img,file,side);img.src=e.target.result;};
+    reader.readAsDataURL(file);
+  }
+  function apply(img,file,side){
+    const $=id=>document.getElementById(id),{s}=State;
+    const label=`${img.naturalWidth}×${img.naturalHeight} · ${(file.size/1024).toFixed(1)}KB`;
+    if(side==='a'){
+      s.imgA=img;
+      $('img-a').src=img.src; $('img-a').classList.remove('hidden');
+      $('prompt-a').classList.add('hidden');
+      $('info-a').textContent=label;
+    } else {
+      s.imgB=img;
+      $('img-b').src=img.src; $('img-b').classList.remove('hidden');
+      $('prompt-b').classList.add('hidden');
+      $('info-b').textContent=label;
+    }
+    const c=document.createElement('canvas');
+    c.width=img.naturalWidth; c.height=img.naturalHeight;
+    c.getContext('2d').drawImage(img,0,0);
+    const data=c.getContext('2d').getImageData(0,0,c.width,c.height);
+    if(side==='a') s.dataA=data; else s.dataB=data;
+    if(s.dataA&&s.dataB){DiffEngine.run();Render.all();Stats.update();Probe.show();Slider.refresh();}
+  }
+  function swap(){
+    const{s}=State;if(!s.imgA||!s.imgB)return;
+    const $=id=>document.getElementById(id);
+    [s.imgA,s.imgB]=[s.imgB,s.imgA];[s.dataA,s.dataB]=[s.dataB,s.dataA];
+    $('img-a').src=s.imgA.src; $('img-b').src=s.imgB.src;
+    const ti=$('info-a').textContent;$('info-a').textContent=$('info-b').textContent;$('info-b').textContent=ti;
+    DiffEngine.run();Render.all();Stats.update();Slider.refresh();Utils.toast('已交换 A / B 图片');
+  }
+  return{init,swap};
+})();
+</script>
+
+<!-- ═══════════════════════ JS MODULE 6: slider.js ═══════════════════════ -->
+<script id="js-slider">
+const Slider = (() => {
+  let splitPct  = 50;   // divider position 0-100%
+  let sliderScale = 1;  // zoom multiplier (1 = fit)
+  let panX = 0, panY = 0; // canvas offset in pixels (pan)
+
+  function init() {
+    const wrap = document.getElementById('slider-wrap');
+    let divDragging = false, panning = false, panSX = 0, panSY = 0;
+
+    // ── Divider drag (left-button, not on handle area) ──
+    function setDiv(cx) {
+      const r = wrap.getBoundingClientRect();
+      splitPct = Math.max(0, Math.min(100, (cx - r.left) / r.width * 100));
+      document.getElementById('cs-divider').style.left = splitPct + '%';
+      redraw();
+    }
+
+    wrap.addEventListener('mousedown', e => {
+      if (e.button !== 0) return;
+      // Middle of wrap → pan; near divider line → split drag
+      const r    = wrap.getBoundingClientRect();
+      const divX = r.left + r.width * splitPct / 100;
+      if (Math.abs(e.clientX - divX) < 12) {
+        divDragging = true;
+      } else {
+        panning = true;
+        panSX = e.clientX - panX;
+        panSY = e.clientY - panY;
+        wrap.style.cursor = 'grabbing';
+      }
+    });
+    window.addEventListener('mousemove', e => {
+      if (divDragging) setDiv(e.clientX);
+      if (panning) {
+        panX = e.clientX - panSX;
+        panY = e.clientY - panSY;
+        redraw();
+      }
+    });
+    window.addEventListener('mouseup', () => {
+      divDragging = false; panning = false;
+      wrap.style.cursor = '';
+    });
+
+    // Touch: single finger = pan, can also hit divider
+    wrap.addEventListener('touchstart', e => {
+      const t = e.touches[0];
+      const r = wrap.getBoundingClientRect();
+      const divX = r.left + r.width * splitPct / 100;
+      if (Math.abs(t.clientX - divX) < 18) { divDragging = true; }
+      else { panning = true; panSX = t.clientX - panX; panSY = t.clientY - panY; }
+    }, { passive: true });
+    window.addEventListener('touchmove', e => {
+      const t = e.touches[0];
+      if (divDragging) setDiv(t.clientX);
+      if (panning) { panX = t.clientX - panSX; panY = t.clientY - panSY; redraw(); }
+    }, { passive: true });
+    window.addEventListener('touchend', () => { divDragging = false; panning = false; });
+
+    // ── Show handle when mouse near divider ──
+    wrap.addEventListener('mousemove', e => {
+      const r    = wrap.getBoundingClientRect();
+      const divX = r.left + r.width * splitPct / 100;
+      const divider = document.getElementById('cs-divider');
+      divider.classList.toggle('near', Math.abs(e.clientX - divX) < 20);
+    });
+    wrap.addEventListener('mouseleave', () => {
+      document.getElementById('cs-divider').classList.remove('near');
+    });
+
+    // ── Ctrl+Wheel zoom ──
+    wrap.addEventListener('wheel', e => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      const { s } = State;
+      if (!s.imgA) return;
+      if (sliderScale === 1) {
+        // initialize from current fit scale
+        const W = wrap.clientWidth, H = wrap.clientHeight;
+        const imgW = Math.max(s.imgA.naturalWidth, s.imgB.naturalWidth);
+        const imgH = Math.max(s.imgA.naturalHeight, s.imgB.naturalHeight);
+        sliderScale = Math.min(W / imgW, H / imgH);
+      }
+      const factor = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+      sliderScale = Math.max(0.05, Math.min(32, sliderScale * factor));
+      redraw();
+    }, { passive: false });
+  }
+
+  function redraw() {
+    const { s } = State;
+    if (!s.imgA || !s.imgB) return;
+
+    const wrap   = document.getElementById('slider-wrap');
+    const canvas = document.getElementById('slider-canvas');
+    const W = wrap.clientWidth, H = wrap.clientHeight;
+    if (!W || !H) return;
+
+    canvas.width  = W;
+    canvas.height = H;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, W, H);
+
+    const imgW = Math.max(s.imgA.naturalWidth,  s.imgB.naturalWidth);
+    const imgH = Math.max(s.imgA.naturalHeight, s.imgB.naturalHeight);
+
+    // Base fit scale, then apply user zoom
+    const fitScale = Math.min(W / imgW, H / imgH);
+    const sc = (sliderScale === 1) ? fitScale : sliderScale;
+    const dw = imgW * sc, dh = imgH * sc;
+
+    // Center + pan offset
+    const ox = (W - dw) / 2 + panX;
+    const oy = (H - dh) / 2 + panY;
+
+    const splitX = W * splitPct / 100;
+
+    ctx.drawImage(s.imgB, ox, oy, dw, dh);
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, 0, splitX, H); ctx.clip();
+    ctx.drawImage(s.imgA, ox, oy, dw, dh);
+    ctx.restore();
+  }
+
+  function refresh() { sliderScale = 1; panX = 0; panY = 0; redraw(); }
+
+  /** Return current render transform so Probe can reverse-map mouse → image pixel */
+  function getTransform() {
+    const { s } = State;
+    if (!s.imgA || !s.imgB) return null;
+    const wrap = document.getElementById('slider-wrap');
+    const W = wrap.clientWidth, H = wrap.clientHeight;
+    const imgW = Math.max(s.imgA.naturalWidth,  s.imgB.naturalWidth);
+    const imgH = Math.max(s.imgA.naturalHeight, s.imgB.naturalHeight);
+    const fitScale = Math.min(W / imgW, H / imgH);
+    const sc = (sliderScale === 1) ? fitScale : sliderScale;
+    const ox = (W - imgW * sc) / 2 + panX;
+    const oy = (H - imgH * sc) / 2 + panY;
+    return { ox, oy, sc };
+  }
+
+  return { init, refresh, getTransform };
+})();
+</script>
+
+<!-- ═══════════════════════ JS MODULE 7: splitter.js ════════════════════ -->
+<script id="js-splitter">
+const SplitterCtrl=(()=>{
+  function init(){
+    const sp=document.getElementById('splitter'),ws=document.getElementById('workspace'),tr=document.getElementById('top-row');
+    let dragging=false,startY=0,startH=0;
+    sp.addEventListener('mousedown',e=>{dragging=true;startY=e.clientY;startH=tr.getBoundingClientRect().height;sp.classList.add('dragging');document.body.style.cursor='row-resize';e.preventDefault();});
+    window.addEventListener('mousemove',e=>{if(!dragging)return;const wsH=ws.getBoundingClientRect().height,newH=Math.max(80,Math.min(wsH-80,startH+(e.clientY-startY)));tr.style.height=newH+'px';});
+    window.addEventListener('mouseup',()=>{if(dragging){dragging=false;sp.classList.remove('dragging');document.body.style.cursor='';}});
+  }
+  return{init};
+})();
+</script>
+
+<!-- ═══════════════════════ JS MODULE 8: utils.js ════════════════════════ -->
+<script id="js-utils">
+const Utils=(()=>{
+  function init(){document.getElementById('btn-export-diff').addEventListener('click',exportDiff);document.getElementById('btn-copy-stats').addEventListener('click',copyStats);}
+  function exportDiff(){
+    const{s}=State,r=s.diffResult;if(!r)return toast('请先加载两张图片');
+    const c=document.createElement('canvas');c.width=r.w;c.height=r.h;
+    const ctx=c.getContext('2d');ctx.fillStyle='#888888';ctx.fillRect(0,0,r.w,r.h);ctx.putImageData(r.out,0,0);
+    const a=document.createElement('a');a.href=c.toDataURL('image/png');a.download='pixeldiff-result.png';a.click();toast('差异图已导出');
+  }
+  function copyStats(){
+    const{s}=State,r=s.diffResult;if(!r)return toast('暂无统计数据');
+    navigator.clipboard.writeText(['PixelDiff 比较结果',`差异像素: ${r.diffCount}`,`差异比例: ${r.pct}%`,`相似度: ${r.sim}%`,`平均ΔE: ${r.avgDE}`,`容差: ${s.tolerance}`,`分辨率: ${r.w}×${r.h}`].join('\n')).then(()=>toast('统计数据已复制'));
+  }
+  // ── Zoom state (shared across all three panels) ──
+  let _scale = 1.0;          // current zoom (1 = fit)
+  let _fitted = true;        // true = no manual zoom yet (use CSS fit)
+
+  function _applyScale() {
+    // A and B: set explicit px size based on natural dimensions
+    const imgA = document.getElementById('img-a');
+    const imgB = document.getElementById('img-b');
+    const canvas = document.getElementById('diff-canvas');
+
+    [imgA, imgB].forEach(img => {
+      if (!img || !img.naturalWidth) return;
+      img.style.width  = Math.round(img.naturalWidth  * _scale) + 'px';
+      img.style.height = Math.round(img.naturalHeight * _scale) + 'px';
+    });
+    if (canvas && canvas.width) {
+      canvas.style.width  = Math.round(canvas.width  * _scale) + 'px';
+      canvas.style.height = Math.round(canvas.height * _scale) + 'px';
+    }
+  }
+
+  function _resetFit() {
+    _scale = 1.0; _fitted = true;
+    ['img-a','img-b'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) { el.style.width = ''; el.style.height = ''; }
+    });
+    const c = document.getElementById('diff-canvas');
+    if (c) { c.style.width = ''; c.style.height = ''; }
+  }
+
+  function initWheel() {
+    const panels = ['view-a', 'view-b', 'diff-body'];
+
+    // ── Shared pan state ──
+    let panning = false, panStartX = 0, panStartY = 0;
+    let panBaseScrolls = {}; // id -> {left, top}
+
+    function syncScroll(dx, dy) {
+      panels.forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.scrollLeft = (panBaseScrolls[id]?.left || 0) - dx;
+        el.scrollTop  = (panBaseScrolls[id]?.top  || 0) - dy;
+      });
+    }
+
+    panels.forEach(id => {
+      const el = document.getElementById(id);
+      if (!el) return;
+
+      // Ctrl+Wheel zoom
+      el.addEventListener('wheel', e => {
+        if (!e.ctrlKey) return;
+        e.preventDefault();
+        const imgA = document.getElementById('img-a');
+        if (_fitted && imgA && imgA.naturalWidth) {
+          _scale = imgA.getBoundingClientRect().width / imgA.naturalWidth;
+          _fitted = false;
+        }
+        const delta = e.deltaY < 0 ? 1.15 : 1 / 1.15;
+        _scale = Math.max(0.05, Math.min(32, _scale * delta));
+        _applyScale();
+      }, { passive: false });
+
+      // Drag-to-pan: capture start position from whichever panel is clicked
+      el.addEventListener('mousedown', e => {
+        if (e.ctrlKey || e.button !== 0) return;
+        panning = true;
+        panStartX = e.clientX; panStartY = e.clientY;
+        // Snapshot scroll positions of ALL panels
+        panels.forEach(pid => {
+          const pel = document.getElementById(pid);
+          if (pel) panBaseScrolls[pid] = { left: pel.scrollLeft, top: pel.scrollTop };
+        });
+        panels.forEach(pid => { const pel = document.getElementById(pid); if (pel) pel.classList.add('panning'); });
+        e.preventDefault();
+      });
+    });
+
+    window.addEventListener('mousemove', e => {
+      if (!panning) return;
+      syncScroll(e.clientX - panStartX, e.clientY - panStartY);
+    });
+    window.addEventListener('mouseup', () => {
+      if (!panning) return;
+      panning = false;
+      panels.forEach(id => { const el = document.getElementById(id); if (el) el.classList.remove('panning'); });
+    });
+  }
+
+  function zoom(side, factor) {
+    if (factor === 0) { _resetFit(); return; }
+    const imgA = document.getElementById('img-a');
+    if (_fitted && imgA && imgA.naturalWidth) {
+      _scale = imgA.getBoundingClientRect().width / imgA.naturalWidth;
+      _fitted = false;
+    }
+    _scale = Math.max(0.05, Math.min(32, _scale * factor));
+    _applyScale();
+  }
+
+  function toast(msg){const t=document.createElement('div');t.className='toast';t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2400);}
+  function _reapply(){if(!_fitted)_applyScale();}
+  return{init,zoom,toast,initWheel,_reapply};
+})();
+function __zoom(s,f){Utils.zoom(s,f);}
+</script>
+
+<!-- ═══════════════════════ JS MODULE 10: probe.js — pixel inspector ════ -->
+<script id="js-probe">
+const Probe = (() => {
+  // Radius of magnifier in source pixels (9x9 = 9 source px shown in 64px canvas → ~7px each)
+  const MAG_RADIUS = 4; // captures a (2r+1)^2 = 9x9 region
+  const MAG_SIZE   = 64;
+  const CELL       = MAG_SIZE / (MAG_RADIUS * 2 + 1); // ~7.1px per source pixel
+
+  function init() {
+    // ── Normal mode: listen on view-a / view-b ──
+    ['view-a', 'view-b'].forEach(viewId => {
+      const view = document.getElementById(viewId);
+      const side = viewId.replace('view-', '');
+      view.addEventListener('mousemove', function(e) {
+        const imgEl = document.getElementById('img-' + side);
+        if (!imgEl || !imgEl.naturalWidth) return;
+        const {s} = State;
+        if (!s.dataA || !s.dataB) return;
+        const rect = imgEl.getBoundingClientRect();
+        const scaleX = imgEl.naturalWidth  / rect.width;
+        const scaleY = imgEl.naturalHeight / rect.height;
+        const px = Math.round((e.clientX - rect.left) * scaleX);
+        const py = Math.round((e.clientY - rect.top)  * scaleY);
+        const maxW = Math.max(s.dataA.width, s.dataB.width);
+        const maxH = Math.max(s.dataA.height, s.dataB.height);
+        if (px < 0 || py < 0 || px >= maxW || py >= maxH) return;
+        updateHUD(px, py);
+      });
+    });
+
+    // ── Slider mode: reverse-map from canvas coords using Slider.getTransform() ──
+    const sliderWrap = document.getElementById('slider-wrap');
+    sliderWrap.addEventListener('mousemove', function(e) {
+      const {s} = State;
+      if (!s.dataA || !s.dataB) return;
+      const t = Slider.getTransform();
+      if (!t) return;
+      const rect = sliderWrap.getBoundingClientRect();
+      const cx = e.clientX - rect.left;  // position within canvas
+      const cy = e.clientY - rect.top;
+      const px = Math.round((cx - t.ox) / t.sc);
+      const py = Math.round((cy - t.oy) / t.sc);
+      const maxW = Math.max(s.dataA.width, s.dataB.width);
+      const maxH = Math.max(s.dataA.height, s.dataB.height);
+      if (px < 0 || py < 0 || px >= maxW || py >= maxH) return;
+      updateHUD(px, py);
+    });
+  }
+
+  function onLeave() {
+    // Keep last value visible — don't blank on leave
+  }
+
+  function updateHUD(px, py) {
+    const {s} = State;
+    const $ = id => document.getElementById(id);
+
+    // Sample pixel from both images
+    const pxA = samplePixel(s.dataA, px, py);
+    const pxB = samplePixel(s.dataB, px, py);
+
+    // Coordinates
+    $('probe-xy').textContent = `${px}, ${py}`;
+
+    // Per-channel deltas
+    const dr = Math.abs(pxA.r - pxB.r);
+    const dg = Math.abs(pxA.g - pxB.g);
+    const db = Math.abs(pxA.b - pxB.b);
+    const da = Math.abs(pxA.a - pxB.a);
+    const maxD = Math.max(dr, dg, db, da);
+    const de = (Math.sqrt(dr*dr + dg*dg + db*db) / Math.sqrt(3*255*255) * 100).toFixed(1);
+    const isDiff = maxD > s.tolerance;
+
+    $('probe-delta').textContent = maxD;
+    $('probe-delta').style.color = isDiff ? 'var(--accent2)' : 'var(--accent)';
+
+    // Image A readout
+    fillPxCol('a', pxA);
+    fillPxCol('b', pxB);
+
+    // Delta column
+    $('probe-diff-rgb').textContent = `ΔR:${dr}  ΔG:${dg}  ΔB:${db}`;
+    const maxEl = $('probe-diff-max');
+    maxEl.textContent = `ΔMax: ${maxD}`;
+    maxEl.className = 'probe-pixel-delta' + (isDiff ? ' diff' : '');
+    $('probe-diff-de').textContent = `ΔE: ${de}`;
+    const dy = Math.abs(luma(pxA.r,pxA.g,pxA.b) - luma(pxB.r,pxB.g,pxB.b));
+    $('probe-diff-dy').textContent = `ΔY: ${dy}`;
+
+    // Draw magnifiers
+    drawMag('mag-a', s.dataA, px, py);
+    drawMag('mag-b', s.dataB, px, py);
+  }
+
+  function samplePixel(data, x, y) {
+    if (!data || x < 0 || y < 0 || x >= data.width || y >= data.height)
+      return {r:0, g:0, b:0, a:0};
+    const i = (y * data.width + x) * 4;
+    return {r: data.data[i], g: data.data[i+1], b: data.data[i+2], a: data.data[i+3]};
+  }
+
+  function luma(r, g, b) {
+    // ITU-R BT.709 luminance
+    return Math.round(0.2126 * r + 0.7152 * g + 0.0722 * b);
+  }
+  function fillPxCol(side, px) {
+    const $ = id => document.getElementById(id);
+    const hex = '#' + [px.r, px.g, px.b].map(v => v.toString(16).padStart(2,'0')).join('').toUpperCase();
+    const y = luma(px.r, px.g, px.b);
+    $('probe-rgb-'+side).textContent = `RGB: ${px.r}, ${px.g}, ${px.b}`;
+    $('probe-hex-'+side).textContent = `HEX: ${hex}`;
+    $('probe-alpha-'+side).textContent = `Alpha: ${px.a}`;
+    $('probe-luma-'+side).textContent = `Y: ${y}`;
+    const sw = $('swatch-'+side);
+    sw.style.background = `rgba(${px.r},${px.g},${px.b},${(px.a/255).toFixed(2)})`;
+  }
+
+  function drawMag(canvasId, data, cx, cy) {
+    const canvas = document.getElementById(canvasId);
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, MAG_SIZE, MAG_SIZE);
+    ctx.fillStyle = '#0d0d12';
+    ctx.fillRect(0, 0, MAG_SIZE, MAG_SIZE);
+
+    if (!data) return;
+
+    const r = MAG_RADIUS;
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        const sx = cx + dx, sy = cy + dy;
+        let color = '#111';
+        if (sx >= 0 && sy >= 0 && sx < data.width && sy < data.height) {
+          const i = (sy * data.width + sx) * 4;
+          const [rv, gv, bv, av] = [data.data[i], data.data[i+1], data.data[i+2], data.data[i+3]];
+          color = `rgba(${rv},${gv},${bv},${(av/255).toFixed(2)})`;
+        }
+        const drawX = (dx + r) * CELL;
+        const drawY = (dy + r) * CELL;
+        ctx.fillStyle = color;
+        ctx.fillRect(drawX, drawY, CELL, CELL);
+      }
+    }
+
+    // Grid lines
+    ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+    ctx.lineWidth = 0.5;
+    for (let i = 0; i <= r*2+1; i++) {
+      ctx.beginPath(); ctx.moveTo(i*CELL, 0); ctx.lineTo(i*CELL, MAG_SIZE); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(0, i*CELL); ctx.lineTo(MAG_SIZE, i*CELL); ctx.stroke();
+    }
+
+    // Center crosshair
+    const cx2 = (r + 0.5) * CELL, cy2 = (r + 0.5) * CELL;
+    ctx.strokeStyle = 'rgba(0,229,160,0.9)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(r * CELL + 0.5, r * CELL + 0.5, CELL - 1, CELL - 1);
+  }
+
+  /** Called by loader when both images are ready */
+  function show() {
+    document.getElementById('probe-bar').classList.add('visible');
+    // cursor:crosshair on the img elements themselves
+    document.getElementById('img-a').style.cursor = 'crosshair';
+    document.getElementById('img-b').style.cursor = 'crosshair';
+  }
+
+  return { init, show, updateHUD };
+})();
+</script>
+
+<!-- ═══════════════════════ JS MODULE 9: app.js ══════════════════════════ -->
+<script id="js-app">
+(function initApp(){
+  Loader.init();Slider.init();SplitterCtrl.init();Utils.init();Utils.initWheel();Probe.init();
+  const{s}=State,$=id=>document.getElementById(id);
+  $('tol-slider').addEventListener('input',e=>{s.tolerance=+e.target.value;$('tol-val').textContent=e.target.value;triggerDiff();});
+  $('overlay-opacity').addEventListener('input',e=>{s.overlayOpacity=e.target.value/100;$('ov-val').textContent=e.target.value+'%';triggerDiff();});
+  $('hl-color').addEventListener('change',e=>{s.hlColor=e.target.value;triggerDiff();});
+  $('btn-ignore-aa').addEventListener('click',()=>{s.ignoreAA=!s.ignoreAA;$('aa-state').textContent=s.ignoreAA?'开':'关';$('btn-ignore-aa').classList.toggle('active',s.ignoreAA);triggerDiff();});
+  $('btn-gray-same').addEventListener('click',()=>{s.graySame=!s.graySame;$('btn-gray-same').classList.toggle('active',s.graySame);triggerDiff();});
+  $('btn-swap').addEventListener('click',Loader.swap);
+  document.querySelectorAll('.mode-tab').forEach(tab=>{
+    tab.addEventListener('click',()=>{document.querySelectorAll('.mode-tab').forEach(t=>t.classList.remove('active'));tab.classList.add('active');setMode(tab.dataset.mode);});
+  });
+  document.addEventListener('keydown',e=>{
+    const d=e.key==='ArrowUp'?1:e.key==='ArrowDown'?-1:0;if(!d)return;
+    const v=Math.max(0,Math.min(255,s.tolerance+d));s.tolerance=v;$('tol-slider').value=v;$('tol-val').textContent=v;triggerDiff();
+  });
+  function triggerDiff(){if(s.dataA&&s.dataB){DiffEngine.run();Render.all();Stats.update();}}
+  function setMode(m){
+    s.mode=m;
+    const tr=document.getElementById('top-row'),pA=$('panel-a'),pB=$('panel-b'),pS=$('panel-slider');
+    if(m==='side'){tr.classList.remove('slider-mode');pA.classList.remove('hidden');pB.classList.remove('hidden');pS.classList.add('hidden');}
+    else if(m==='slider'){tr.classList.add('slider-mode');pA.classList.add('hidden');pB.classList.add('hidden');pS.classList.remove('hidden');setTimeout(()=>Slider.refresh(),0);}
+  }
+})();
+</script>
+
+
+</body>
+</html>
