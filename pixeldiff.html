@@ -140,6 +140,13 @@ select.sel{font-family:var(--font-ui);font-size:10px;background:var(--surface2);
   opacity:0;transition:opacity .2s;}
 .cs-divider.near .cs-handle{opacity:1;}
 
+/* Quality / IQA bar */
+.quality-bar{flex-shrink:0;display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:5px 16px;border-top:1px solid var(--border);background:rgba(16,16,24,.9);font-family:var(--font-mono);font-size:10px;overflow-x:auto;}
+.quality-bar::-webkit-scrollbar{height:2px;} .quality-bar::-webkit-scrollbar-thumb{background:var(--border);}
+.quality-title{font-size:9px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:1.2px;flex-shrink:0;white-space:nowrap;}
+.q-grade{display:inline-block;font-size:8px;font-weight:700;padding:1px 5px;border-radius:3px;margin-left:3px;background:rgba(0,229,160,.15);color:var(--accent);letter-spacing:.5px;vertical-align:middle;}
+.q-grade.warn{background:rgba(255,209,102,.15);color:#ffd166;} .q-grade.bad{background:rgba(255,77,109,.15);color:var(--accent2);}
+
 /* Toast */
 .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--surface2);border:1px solid var(--accent);color:var(--text);padding:7px 16px;border-radius:7px;font-size:11px;z-index:2000;box-shadow:0 0 20px rgba(0,229,160,.18);animation:fadeUp .2s ease;pointer-events:none;}
 @keyframes fadeUp{from{opacity:0;transform:translate(-50%,8px);}to{opacity:1;transform:translate(-50%,0);}}
@@ -235,6 +242,129 @@ select.sel{font-family:var(--font-ui);font-size:10px;background:var(--surface2);
   position:absolute; inset:0; pointer-events:none; z-index:10;
 }
 </style>
+
+<!-- ═══════════════════════ CSS MODULE 5: noise-chart ════════════════════ -->
+<style id="css-noise-chart">
+.noise-modal {
+  display:none; position:fixed; inset:0; z-index:1000;
+  background:rgba(10,10,15,.82); backdrop-filter:blur(5px);
+  align-items:center; justify-content:center;
+}
+.noise-modal.visible { display:flex; }
+.noise-panel {
+  background:var(--surface); border:1px solid var(--border); border-radius:10px;
+  padding:20px; width:min(780px,96vw);
+  box-shadow:0 0 48px rgba(0,0,0,.7);
+}
+.noise-panel-hdr {
+  display:flex; align-items:center; justify-content:space-between; margin-bottom:14px;
+}
+.noise-panel-title {
+  font-size:13px; font-weight:700; color:var(--text);
+  display:flex; align-items:center; gap:8px;
+}
+.noise-panel-sub {
+  font-size:10px; color:var(--text-dim); font-weight:400; margin-left:4px;
+}
+.noise-close {
+  background:none; border:1px solid var(--border); color:var(--text-dim);
+  cursor:pointer; border-radius:4px; padding:3px 9px; font-size:11px; font-family:var(--font-ui);
+}
+.noise-close:hover { border-color:var(--accent2); color:var(--accent2); }
+.noise-canvas-wrap {
+  position:relative; width:100%; border:1px solid var(--border); border-radius:6px; overflow:hidden;
+}
+#noise-canvas { display:block; width:100%; height:260px; background:var(--bg); }
+.noise-footer {
+  display:flex; gap:20px; margin-top:10px;
+  font-family:var(--font-mono); font-size:10px; color:var(--text-dim); flex-wrap:wrap;
+  align-items:center;
+}
+.noise-legend-item { display:flex; align-items:center; gap:5px; }
+.noise-legend-line { width:16px; height:2px; border-radius:1px; }
+.noise-channel-btns { display:flex; gap:4px; margin-left:auto; }
+.noise-ch-btn {
+  font-family:var(--font-ui); font-size:9px; font-weight:700; padding:3px 8px;
+  border-radius:4px; border:1px solid var(--border); background:var(--surface2);
+  color:var(--text-dim); cursor:pointer;
+}
+.noise-ch-btn.active { background:var(--accent3); color:#fff; border-color:var(--accent3); }
+
+/* IQA tooltip */
+.iqa-tip {
+  position:fixed; z-index:800; pointer-events:none;
+  background:var(--surface2); border:1px solid var(--border); border-radius:8px;
+  padding:12px 14px; width:260px;
+  box-shadow:0 6px 28px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.04);
+  font-family:var(--font-ui); font-size:11px; color:var(--text);
+  display:none; line-height:1.5;
+}
+.iqa-tip.visible { display:block; }
+.iqa-tip-name { font-weight:700; font-size:11px; color:var(--accent); margin-bottom:5px; }
+.iqa-tip-desc { color:var(--text-dim); font-size:10px; line-height:1.55; margin-bottom:7px; }
+.iqa-tip-formula {
+  font-family:var(--font-mono); font-size:9px; color:var(--accent3);
+  background:rgba(123,97,255,.08); border:1px solid rgba(123,97,255,.2);
+  border-radius:4px; padding:4px 7px; margin-bottom:8px; word-break:break-all;
+}
+.iqa-tip-grades { display:flex; flex-direction:column; gap:3px; }
+.iqa-tip-grade {
+  display:flex; align-items:center; gap:7px;
+  font-size:10px; color:var(--text-dim);
+}
+.iqa-tip-thresh {
+  font-family:var(--font-mono); font-size:9px; font-weight:600;
+  min-width:60px; flex-shrink:0;
+  color:var(--text);
+}
+.iqa-tip-grade.good .iqa-tip-thresh { color:var(--accent); }
+.iqa-tip-grade.warn .iqa-tip-thresh { color:#ffd166; }
+.iqa-tip-grade.bad  .iqa-tip-thresh { color:var(--accent2); }
+.iqa-tip-dot { width:5px; height:5px; border-radius:50%; flex-shrink:0; background:var(--border); }
+.iqa-tip-grade.good .iqa-tip-dot { background:var(--accent); }
+.iqa-tip-grade.warn .iqa-tip-dot { background:#ffd166; }
+.iqa-tip-grade.bad  .iqa-tip-dot { background:var(--accent2); }
+</style>
+
+<!-- ═══════════════════════ CSS MODULE 6: raw ════════════════════════════ -->
+<style id="css-raw">
+/* RAW setup dialog */
+.raw-modal{display:none;position:fixed;inset:0;z-index:1100;background:rgba(10,10,15,.88);backdrop-filter:blur(6px);align-items:center;justify-content:center;}
+.raw-modal.visible{display:flex;}
+.raw-panel{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:22px;width:min(360px,94vw);box-shadow:0 0 52px rgba(0,0,0,.8);font-family:var(--font-ui);}
+.raw-panel-title{font-size:13px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:8px;margin-bottom:18px;}
+.raw-fields{display:flex;flex-direction:column;gap:11px;}
+.raw-field{display:flex;align-items:center;justify-content:space-between;gap:8px;}
+.raw-field-label{font-size:11px;color:var(--text-dim);}
+.raw-field input[type=number],.raw-field select{background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:4px 9px;border-radius:var(--radius);font-family:var(--font-mono);font-size:11px;width:168px;}
+.raw-field input:focus,.raw-field select:focus{outline:none;border-color:var(--accent);}
+.raw-endian-row{display:flex;gap:14px;}
+.raw-endian-row label{font-family:var(--font-mono);font-size:11px;color:var(--text);cursor:pointer;display:flex;align-items:center;gap:5px;}
+.raw-hint{font-size:9px;color:var(--text-dim);line-height:1.6;margin-top:11px;padding:7px 9px;background:rgba(255,255,255,.03);border-radius:4px;border:1px solid var(--border);}
+.raw-panel-footer{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;padding-top:14px;border-top:1px solid var(--border);}
+
+/* RAW controls bar */
+.raw-bar{flex-shrink:0;display:none;align-items:center;padding:0 4px;border-bottom:1px solid var(--border);background:rgba(12,12,20,.97);overflow-x:auto;position:relative;z-index:9;}
+.raw-bar.visible{display:flex;}
+.raw-bar::-webkit-scrollbar{height:2px;} .raw-bar::-webkit-scrollbar-thumb{background:var(--border);}
+.raw-tag{font-size:9px;font-weight:800;color:var(--accent);text-transform:uppercase;letter-spacing:1.5px;padding:6px 12px;flex-shrink:0;border-right:1px solid var(--border);}
+.raw-cg{display:flex;align-items:center;gap:5px;padding:5px 10px;border-right:1px solid var(--border);flex-shrink:0;}
+.raw-cg-lbl{font-size:9px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.9px;white-space:nowrap;}
+.raw-pat-wrap{display:flex;border-radius:var(--radius);overflow:hidden;border:1px solid var(--border);}
+.raw-pat{font-family:var(--font-mono);font-size:10px;font-weight:700;padding:3px 7px;border:none;background:var(--surface2);color:var(--text-dim);cursor:pointer;letter-spacing:.3px;}
+.raw-pat.active{background:var(--accent);color:var(--bg);}
+.raw-gl{font-size:10px;font-weight:700;font-family:var(--font-mono);color:var(--text-dim);}
+.raw-gl.r{color:#f08080;} .raw-gl.g{color:#80e080;} .raw-gl.b{color:#80b0ff;}
+.raw-gi{width:56px;background:var(--surface2);border:1px solid var(--border);color:var(--text);font-family:var(--font-mono);font-size:10px;padding:3px 5px;border-radius:4px;text-align:center;appearance:textfield;-moz-appearance:textfield;}
+.raw-gi::-webkit-outer-spin-button,.raw-gi::-webkit-inner-spin-button{-webkit-appearance:none;}
+.raw-gi:focus{outline:none;border-color:var(--accent);}
+.raw-gray{font-family:var(--font-ui);font-size:9px;font-weight:700;padding:3px 8px;border-radius:4px;border:1px solid var(--border);background:var(--surface2);color:var(--text-dim);cursor:pointer;white-space:nowrap;}
+.raw-gray:hover{border-color:var(--accent3);color:var(--accent3);}
+.raw-gray.picking{background:var(--accent3);color:#fff;border-color:var(--accent3);}
+/* gray-pick crosshair hint overlay */
+.raw-pick-hint{position:absolute;bottom:0;left:50%;transform:translateX(-50%);background:rgba(123,97,255,.9);color:#fff;font-size:10px;padding:2px 10px;border-radius:4px 4px 0 0;pointer-events:none;display:none;z-index:100;white-space:nowrap;}
+.raw-pick-hint.visible{display:block;}
+</style>
 </head>
 <body>
 
@@ -283,6 +413,50 @@ select.sel{font-family:var(--font-ui);font-size:10px;background:var(--surface2);
   <div class="ctrl-group">
     <button class="btn" id="btn-export-diff">⬇ 导出差异图</button>
     <button class="btn" id="btn-copy-stats">复制统计</button>
+    <button class="btn" id="btn-noise-chart">噪声方差图</button>
+  </div>
+</div>
+
+<!-- ════════════════ RAW CONTROLS BAR ════════════════ -->
+<div class="raw-bar" id="raw-bar">
+  <span class="raw-tag">RAW</span>
+  <!-- Bayer Pattern (shared for both sides) -->
+  <div class="raw-cg">
+    <span class="raw-cg-lbl">Pattern</span>
+    <div class="raw-pat-wrap">
+      <button class="raw-pat active" data-pat="RGGB">RGGB</button>
+      <button class="raw-pat" data-pat="GRBG">GRBG</button>
+      <button class="raw-pat" data-pat="GBRG">GBRG</button>
+      <button class="raw-pat" data-pat="BGGR">BGGR</button>
+    </div>
+  </div>
+  <!-- AWB Side A -->
+  <div class="raw-cg" id="raw-awb-a" style="display:none">
+    <span class="raw-cg-lbl">A</span>
+    <span class="raw-cg-lbl" style="color:var(--text-dim);opacity:.6;font-size:8px">AWB</span>
+    <span class="raw-gl r">R</span><input class="raw-gi" id="raw-r-a" type="number" value="1.000" step="0.001" min="0.001" max="16">
+    <span class="raw-gl g">G</span><input class="raw-gi" id="raw-g-a" type="number" value="1.000" step="0.001" min="0.001" max="16">
+    <span class="raw-gl b">B</span><input class="raw-gi" id="raw-b-a" type="number" value="1.000" step="0.001" min="0.001" max="16">
+    <button class="raw-gray" id="raw-gray-a">灰点</button>
+    <span class="raw-cg-lbl" style="margin-left:6px;color:var(--text-dim);opacity:.6;font-size:8px">增益</span>
+    <input class="raw-gi" id="raw-dg-a" type="number" value="1.00" step="0.1" min="0.01" max="256" title="数字增益 Digital Gain">
+    <span class="raw-cg-lbl" style="margin-left:4px;color:var(--text-dim);opacity:.6;font-size:8px">Gamma</span>
+    <input class="raw-gi" id="raw-gm-a" type="number" value="1.0" step="0.1" min="0.1" max="4.0" title="Gamma（1.0=线性, 2.2=sRGB）">
+    <button class="btn" id="raw-reset-a" style="font-size:9px;padding:3px 7px;margin-left:2px">重置</button>
+  </div>
+  <!-- AWB Side B -->
+  <div class="raw-cg" id="raw-awb-b" style="display:none">
+    <span class="raw-cg-lbl">B</span>
+    <span class="raw-cg-lbl" style="color:var(--text-dim);opacity:.6;font-size:8px">AWB</span>
+    <span class="raw-gl r">R</span><input class="raw-gi" id="raw-r-b" type="number" value="1.000" step="0.001" min="0.001" max="16">
+    <span class="raw-gl g">G</span><input class="raw-gi" id="raw-g-b" type="number" value="1.000" step="0.001" min="0.001" max="16">
+    <span class="raw-gl b">B</span><input class="raw-gi" id="raw-b-b" type="number" value="1.000" step="0.001" min="0.001" max="16">
+    <button class="raw-gray" id="raw-gray-b">灰点</button>
+    <span class="raw-cg-lbl" style="margin-left:6px;color:var(--text-dim);opacity:.6;font-size:8px">增益</span>
+    <input class="raw-gi" id="raw-dg-b" type="number" value="1.00" step="0.1" min="0.01" max="256" title="数字增益 Digital Gain">
+    <span class="raw-cg-lbl" style="margin-left:4px;color:var(--text-dim);opacity:.6;font-size:8px">Gamma</span>
+    <input class="raw-gi" id="raw-gm-b" type="number" value="1.0" step="0.1" min="0.1" max="4.0" title="Gamma（1.0=线性, 2.2=sRGB）">
+    <button class="btn" id="raw-reset-b" style="font-size:9px;padding:3px 7px;margin-left:2px">重置</button>
   </div>
 </div>
 
@@ -297,7 +471,7 @@ select.sel{font-family:var(--font-ui);font-size:10px;background:var(--surface2);
       <div class="panel-header">
         <div class="panel-title"><div class="dot"></div>图片 A</div>
         <label class="btn" style="cursor:pointer;margin-left:auto">
-          📂 打开<input type="file" accept="image/*" id="file-a" style="display:none">
+          📂 打开<input type="file" accept="image/*,.raw" id="file-a" style="display:none">
         </label>
         <span class="panel-info" id="info-a" style="margin-left:8px">未加载</span>
       </div>
@@ -323,7 +497,7 @@ select.sel{font-family:var(--font-ui);font-size:10px;background:var(--surface2);
       <div class="panel-header">
         <div class="panel-title"><div class="dot red"></div>图片 B</div>
         <label class="btn" style="cursor:pointer;margin-left:auto">
-          📂 打开<input type="file" accept="image/*" id="file-b" style="display:none">
+          📂 打开<input type="file" accept="image/*,.raw" id="file-b" style="display:none">
         </label>
         <span class="panel-info" id="info-b" style="margin-left:8px">未加载</span>
       </div>
@@ -432,16 +606,116 @@ select.sel{font-family:var(--font-ui);font-size:10px;background:var(--surface2);
         <div class="metric"><span class="metric-label">分辨率:</span><span class="metric-val" id="stat-res">—</span></div>
         <div class="metric" style="margin-left:auto"><span class="metric-label">尺寸匹配:</span><span class="metric-val" id="stat-match">—</span></div>
       </div>
+      <!-- IQA quality metrics bar -->
+      <div class="quality-bar hidden" id="quality-bar">
+        <span class="quality-title">IQA</span>
+        <div class="stats-sep"></div>
+        <div class="metric" data-tip="ssim"><span class="metric-label">SSIM:</span><span class="metric-val" id="q-ssim">—</span><span class="q-grade" id="q-ssim-g"></span></div>
+        <div class="stats-sep"></div>
+        <div class="metric" data-tip="psnr"><span class="metric-label">PSNR:</span><span class="metric-val" id="q-psnr">—</span></div>
+        <div class="metric" data-tip="psnr_rgb" style="gap:3px">
+          <span class="metric-label">R:</span><span class="metric-val" id="q-psnr-r">—</span>
+          <span class="metric-label" style="margin-left:5px">G:</span><span class="metric-val" id="q-psnr-g">—</span>
+          <span class="metric-label" style="margin-left:5px">B:</span><span class="metric-val" id="q-psnr-b">—</span>
+        </div>
+        <div class="stats-sep"></div>
+        <div class="metric" data-tip="mse"><span class="metric-label">MSE:</span><span class="metric-val" id="q-mse">—</span></div>
+        <div class="metric" data-tip="rmse"><span class="metric-label">RMSE:</span><span class="metric-val" id="q-rmse">—</span></div>
+        <div class="metric" data-tip="mae"><span class="metric-label">MAE:</span><span class="metric-val" id="q-mae">—</span></div>
+        <div class="stats-sep"></div>
+        <div class="metric" data-tip="hist"><span class="metric-label">直方图相关:</span><span class="metric-val" id="q-hist">—</span></div>
+      </div>
     </div>
   </div><!-- /bot-row -->
 
 </div><!-- /workspace -->
 
+<!-- ════════════════ RAW SETUP DIALOG ════════════════ -->
+<div class="raw-modal" id="raw-modal">
+  <div class="raw-panel">
+    <div class="raw-panel-title">
+      <div class="dot purple"></div>RAW 图像配置 — 图片 <span id="raw-side-label">A</span>
+    </div>
+    <div class="raw-fields">
+      <div class="raw-field"><span class="raw-field-label">宽度 (px)</span><input type="number" id="raw-cfg-w" value="1920" min="1" max="65535"></div>
+      <div class="raw-field"><span class="raw-field-label">高度 (px)</span><input type="number" id="raw-cfg-h" value="1080" min="1" max="65535"></div>
+      <div class="raw-field">
+        <span class="raw-field-label">位深</span>
+        <select id="raw-cfg-bits">
+          <option value="8">8-bit (uint8)</option>
+          <option value="10" selected>10-bit (uint16)</option>
+          <option value="12">12-bit (uint16)</option>
+          <option value="14">14-bit (uint16)</option>
+          <option value="16">16-bit (uint16)</option>
+        </select>
+      </div>
+      <div class="raw-field">
+        <span class="raw-field-label">字节序</span>
+        <div class="raw-endian-row">
+          <label><input type="radio" name="raw-endian" value="le" checked> LE</label>
+          <label><input type="radio" name="raw-endian" value="be"> BE</label>
+        </div>
+      </div>
+    </div>
+    <div class="raw-hint">格式：每像素 1 byte (8-bit) 或 2 bytes unpacked uint16 (10/12/14/16-bit)，无文件头，行优先存储。</div>
+    <div class="raw-panel-footer">
+      <button class="btn" id="raw-cfg-cancel">取消</button>
+      <button class="btn active" id="raw-cfg-ok">确认加载</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════ IQA TOOLTIP ════════════════ -->
+<div id="iqa-tip" class="iqa-tip">
+  <div class="iqa-tip-name"></div>
+  <div class="iqa-tip-desc"></div>
+  <div class="iqa-tip-formula"></div>
+  <div class="iqa-tip-grades"></div>
+</div>
+
+<!-- ════════════════ NOISE CHART MODAL ════════════════ -->
+<div class="noise-modal" id="noise-modal">
+  <div class="noise-panel">
+    <div class="noise-panel-hdr">
+      <div class="noise-panel-title">
+        <div class="dot purple"></div>
+        噪声方差图
+        <span class="noise-panel-sub">X轴: Luma · Y轴: 差异方差</span>
+      </div>
+      <button class="noise-close" id="noise-close">✕ 关闭</button>
+    </div>
+    <div class="noise-canvas-wrap">
+      <canvas id="noise-canvas"></canvas>
+    </div>
+    <div class="noise-footer">
+      <div class="noise-legend-item">
+        <div class="noise-legend-line" style="background:var(--accent)"></div>Y (Luma)
+      </div>
+      <div class="noise-legend-item">
+        <div class="noise-legend-line" style="background:#ff6b6b"></div>R
+      </div>
+      <div class="noise-legend-item">
+        <div class="noise-legend-line" style="background:#51cf66"></div>G
+      </div>
+      <div class="noise-legend-item">
+        <div class="noise-legend-line" style="background:#74c0fc"></div>B
+      </div>
+      <span id="noise-peak-text" style="color:var(--text-dim)"></span>
+      <div class="noise-channel-btns">
+        <button class="noise-ch-btn active" data-ch="Y">Y</button>
+        <button class="noise-ch-btn" data-ch="R">R</button>
+        <button class="noise-ch-btn" data-ch="G">G</button>
+        <button class="noise-ch-btn" data-ch="B">B</button>
+        <button class="noise-ch-btn" data-ch="ALL">全部</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- ═══════════════════════ JS MODULE 1: state.js ════════════════════════ -->
 <script id="js-state">
 const State=(()=>{
-  const s={imgA:null,imgB:null,dataA:null,dataB:null,tolerance:10,mode:'side',overlayOpacity:.8,ignoreAA:false,graySame:false,hlColor:'red',diffResult:null};
+  const s={imgA:null,imgB:null,dataA:null,dataB:null,rawA:null,rawB:null,tolerance:10,mode:'side',overlayOpacity:.8,ignoreAA:false,graySame:false,hlColor:'red',diffResult:null};
   function getHlColor(m,i){
     switch(m){case'cyan':return[0,230,255];case'yellow':return[255,220,0];case'magenta':return[255,0,200];case'heat':{const t=Math.min(i/255,1);return[255,Math.round(220*(1-t)),0];}default:return[255,60,80];}
   }
@@ -518,10 +792,35 @@ const Stats=(()=>{
     $('stat-tol').textContent=s.tolerance;
     const match=s.dataA.width===s.dataB.width&&s.dataA.height===s.dataB.height;
     const el=$('stat-match');el.textContent=match?'✓ 匹配':'✗ 不同';el.className='metric-val '+(match?'good':'warn');
-    $('header-stats').innerHTML=`<div class="stat-item"><div class="stat-dot red"></div><span>差异: </span><span class="stat-val">${r.diffCount.toLocaleString()} px</span></div><div class="stat-item"><div class="stat-dot"></div><span>相似度: </span><span class="stat-val">${r.sim}%</span></div><div class="stat-item"><div class="stat-dot purple"></div><span>ΔE: </span><span class="stat-val">${r.avgDE}</span></div>`;
+    const iq=s.iqaResult;
+    const ssimPart=iq?`<div class="stat-item"><div class="stat-dot purple"></div><span>SSIM: </span><span class="stat-val">${iq.ssim.toFixed(4)}</span></div><div class="stat-item"><div class="stat-dot"></div><span>PSNR: </span><span class="stat-val">${isFinite(iq.psnrY)?iq.psnrY.toFixed(1)+'dB':'∞'}</span></div>`:'';
+    $('header-stats').innerHTML=`<div class="stat-item"><div class="stat-dot red"></div><span>差异: </span><span class="stat-val">${r.diffCount.toLocaleString()} px</span></div><div class="stat-item"><div class="stat-dot"></div><span>相似度: </span><span class="stat-val">${r.sim}%</span></div><div class="stat-item"><div class="stat-dot purple"></div><span>ΔE: </span><span class="stat-val">${r.avgDE}</span></div>${ssimPart}`;
+  }
+  function updateIQA(){
+    const{s}=State,r=s.iqaResult;if(!r)return;
+    const $=id=>document.getElementById(id);
+    $('quality-bar').classList.remove('hidden');
+    // SSIM
+    $('q-ssim').textContent=r.ssim.toFixed(4);
+    const sg=r.ssim>=0.99?'优秀':r.ssim>=0.95?'良好':r.ssim>=0.80?'一般':'较差';
+    const sc=r.ssim>=0.95?'':r.ssim>=0.80?'warn':'bad';
+    $('q-ssim-g').textContent=sg; $('q-ssim-g').className='q-grade'+(sc?' '+sc:'');
+    // PSNR
+    const fdb=v=>isFinite(v)?v.toFixed(1)+'dB':'∞';
+    const pc=v=>isFinite(v)?v>=40?'good':v>=30?'warn':'bad':'good';
+    $('q-psnr').textContent=fdb(r.psnrY); $('q-psnr').className='metric-val '+pc(r.psnrY);
+    $('q-psnr-r').textContent=fdb(r.psnrR); $('q-psnr-g').textContent=fdb(r.psnrG); $('q-psnr-b').textContent=fdb(r.psnrB);
+    // Error metrics
+    $('q-mse').textContent=r.mseY.toFixed(2);
+    $('q-rmse').textContent=r.rmseY.toFixed(2);
+    $('q-mae').textContent=r.maeY.toFixed(2);
+    // Histogram correlation
+    const hc=r.histCorr;
+    $('q-hist').textContent=hc.toFixed(4);
+    $('q-hist').className='metric-val '+(hc>=0.99?'good':hc>=0.95?'warn':'bad');
   }
   function setMV(el,text,value){el.textContent=text;const v=parseFloat(value);el.className='metric-val '+(v<1?'good':v<5?'warn':'bad');}
-  return{update};
+  return{update,updateIQA};
 })();
 </script>
 
@@ -554,7 +853,9 @@ const Loader=(()=>{
     });
   }
   function load(file,side){
-    if(!file||!file.type.startsWith('image/'))return;
+    if(!file)return;
+    if(file.name.toLowerCase().endsWith('.raw')){Raw.loadRaw(file,side);return;}
+    if(!file.type.startsWith('image/'))return;
     const reader=new FileReader();
     reader.onload=e=>{const img=new Image();img.onload=()=>apply(img,file,side);img.src=e.target.result;};
     reader.readAsDataURL(file);
@@ -578,7 +879,7 @@ const Loader=(()=>{
     c.getContext('2d').drawImage(img,0,0);
     const data=c.getContext('2d').getImageData(0,0,c.width,c.height);
     if(side==='a') s.dataA=data; else s.dataB=data;
-    if(s.dataA&&s.dataB){DiffEngine.run();Render.all();Stats.update();Probe.show();Slider.refresh();}
+    if(s.dataA&&s.dataB){DiffEngine.run();IQAEngine.run();Render.all();Stats.update();Stats.updateIQA();Probe.show();Slider.refresh();}
   }
   function swap(){
     const{s}=State;if(!s.imgA||!s.imgB)return;
@@ -586,7 +887,7 @@ const Loader=(()=>{
     [s.imgA,s.imgB]=[s.imgB,s.imgA];[s.dataA,s.dataB]=[s.dataB,s.dataA];
     $('img-a').src=s.imgA.src; $('img-b').src=s.imgB.src;
     const ti=$('info-a').textContent;$('info-a').textContent=$('info-b').textContent;$('info-b').textContent=ti;
-    DiffEngine.run();Render.all();Stats.update();Slider.refresh();Utils.toast('已交换 A / B 图片');
+    DiffEngine.run();IQAEngine.run();Render.all();Stats.update();Stats.updateIQA();Slider.refresh();Utils.toast('已交换 A / B 图片');
   }
   return{init,swap};
 })();
@@ -664,9 +965,8 @@ const Slider = (() => {
       document.getElementById('cs-divider').classList.remove('near');
     });
 
-    // ── Ctrl+Wheel zoom ──
+    // ── Wheel zoom ──
     wrap.addEventListener('wheel', e => {
-      if (!e.ctrlKey) return;
       e.preventDefault();
       const { s } = State;
       if (!s.imgA) return;
@@ -818,9 +1118,8 @@ const Utils=(()=>{
       const el = document.getElementById(id);
       if (!el) return;
 
-      // Ctrl+Wheel zoom
+      // Wheel zoom
       el.addEventListener('wheel', e => {
-        if (!e.ctrlKey) return;
         e.preventDefault();
         const imgA = document.getElementById('img-a');
         if (_fitted && imgA && imgA.naturalWidth) {
@@ -1046,10 +1345,800 @@ const Probe = (() => {
 })();
 </script>
 
+<!-- ═══════════════════════ JS MODULE 12: iqa.js ════════════════════════ -->
+<script id="js-iqa">
+const IQAEngine = (() => {
+  // ── Main entry: compute all IQA metrics and store in State ──
+  function run() {
+    const { s } = State;
+    if (!s.dataA || !s.dataB) return null;
+
+    const adA = s.dataA.data, adB = s.dataB.data;
+    const wA = s.dataA.width, hA = s.dataA.height;
+    const wB = s.dataB.width, hB = s.dataB.height;
+    const w = Math.min(wA, wB), h = Math.min(hA, hB);
+    const n = w * h;
+
+    // Histograms for R, G, B (256 bins)
+    const hAR = new Int32Array(256), hBR = new Int32Array(256);
+    const hAG = new Int32Array(256), hBG = new Int32Array(256);
+    const hAB = new Int32Array(256), hBB = new Int32Array(256);
+
+    let mseY = 0, mseR = 0, mseG = 0, mseB = 0, maeY = 0;
+
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const iA = (y * wA + x) * 4, iB = (y * wB + x) * 4;
+        const rA = adA[iA], gA = adA[iA+1], bA = adA[iA+2];
+        const rB = adB[iB], gB = adB[iB+1], bB = adB[iB+2];
+
+        const lA = 0.2126*rA + 0.7152*gA + 0.0722*bA;
+        const lB = 0.2126*rB + 0.7152*gB + 0.0722*bB;
+        const dY = lA - lB, dR = rA-rB, dG = gA-gB, dBv = bA-bB;
+
+        mseY  += dY*dY;  mseR += dR*dR;  mseG += dG*dG;  mseB += dBv*dBv;
+        maeY  += Math.abs(dY);
+
+        hAR[rA]++; hBR[rB]++; hAG[gA]++; hBG[gB]++; hAB[bA]++; hBB[bB]++;
+      }
+    }
+
+    mseY /= n; mseR /= n; mseG /= n; mseB /= n; maeY /= n;
+    const rmseY = Math.sqrt(mseY);
+
+    // PSNR (dB); Infinity when MSE = 0 (identical images)
+    const psnr = mse => mse > 0 ? 10 * Math.log10(255*255 / mse) : Infinity;
+    const psnrY = psnr(mseY), psnrR = psnr(mseR), psnrG = psnr(mseG), psnrB = psnr(mseB);
+
+    // Histogram Pearson correlation, averaged across R/G/B
+    const histCorr = (pearson(hAR, hBR) + pearson(hAG, hBG) + pearson(hAB, hBB)) / 3;
+
+    // SSIM on luma (8×8 sliding blocks, stride 4 for speed on large images)
+    const ssim = computeSSIM(s.dataA, s.dataB, w, h);
+
+    const result = { ssim, psnrY, psnrR, psnrG, psnrB, mseY, rmseY, maeY, histCorr };
+    s.iqaResult = result;
+    return result;
+  }
+
+  // Pearson correlation between two length-256 histograms
+  function pearson(hA, hB) {
+    let muA = 0, muB = 0;
+    for (let i = 0; i < 256; i++) { muA += hA[i]; muB += hB[i]; }
+    muA /= 256; muB /= 256;
+    let num = 0, dA2 = 0, dB2 = 0;
+    for (let i = 0; i < 256; i++) {
+      const a = hA[i] - muA, b = hB[i] - muB;
+      num += a * b; dA2 += a * a; dB2 += b * b;
+    }
+    const denom = Math.sqrt(dA2 * dB2);
+    return denom > 0 ? num / denom : 1;
+  }
+
+  // SSIM (luma, 8×8 blocks, stride 4 for balance of accuracy vs speed)
+  function computeSSIM(dataA, dataB, w, h) {
+    const adA = dataA.data, adB = dataB.data;
+    const wA = dataA.width, wB = dataB.width;
+    const C1 = 6.5025, C2 = 58.5225; // (k1*255)^2, k1=0.01; (k2*255)^2, k2=0.03
+    const BS = 8, STEP = 4;
+    let ssimSum = 0, cnt = 0;
+
+    for (let by = 0; by + BS <= h; by += STEP) {
+      for (let bx = 0; bx + BS <= w; bx += STEP) {
+        let sA=0, sB=0, sA2=0, sB2=0, sAB=0;
+        for (let dy = 0; dy < BS; dy++) {
+          for (let dx = 0; dx < BS; dx++) {
+            const py = by+dy, px = bx+dx;
+            const iA = (py*wA+px)*4, iB = (py*wB+px)*4;
+            const lA = 0.2126*adA[iA] + 0.7152*adA[iA+1] + 0.0722*adA[iA+2];
+            const lB = 0.2126*adB[iB] + 0.7152*adB[iB+1] + 0.0722*adB[iB+2];
+            sA+=lA; sB+=lB; sA2+=lA*lA; sB2+=lB*lB; sAB+=lA*lB;
+          }
+        }
+        const n = BS*BS;
+        const muA=sA/n, muB=sB/n;
+        const vA=sA2/n-muA*muA, vB=sB2/n-muB*muB, cov=sAB/n-muA*muB;
+        ssimSum += ((2*muA*muB+C1)*(2*cov+C2)) / ((muA*muA+muB*muB+C1)*(vA+vB+C2));
+        cnt++;
+      }
+    }
+    return cnt > 0 ? ssimSum / cnt : 1;
+  }
+
+  // ── Tooltip on hover for IQA quality bar ──
+  function initTooltips() {
+    const TIPS = {
+      ssim: {
+        name: 'SSIM · 结构相似度',
+        desc: '同时衡量亮度、对比度、结构三个维度的相似性，基于 Luma 通道 8×8 滑动窗口计算，范围 0–1。',
+        formula: 'SSIM = L(x,y) · C(x,y) · S(x,y)',
+        grades: [
+          { t:'≥ 0.99', l:'优秀', c:'good' }, { t:'≥ 0.95', l:'良好', c:'good' },
+          { t:'≥ 0.80', l:'一般', c:'warn' }, { t:'< 0.80',  l:'较差', c:'bad'  },
+        ],
+      },
+      psnr: {
+        name: 'PSNR · 峰值信噪比（Luma）',
+        desc: '用分贝(dB)衡量重建质量，基于 Luma 通道的 MSE 计算。两图完全相同时为无穷大。',
+        formula: 'PSNR = 10·log₁₀(255² / MSE_Y)',
+        grades: [
+          { t:'≥ 40 dB', l:'优秀 — 肉眼几乎无差异', c:'good' },
+          { t:'≥ 30 dB', l:'良好',                  c:'good' },
+          { t:'≥ 20 dB', l:'一般 — 明显失真',        c:'warn' },
+          { t:'< 20 dB', l:'较差',                  c:'bad'  },
+        ],
+      },
+      psnr_rgb: {
+        name: 'PSNR-R/G/B · 各通道峰值信噪比',
+        desc: '对 R、G、B 三个颜色通道分别独立计算 PSNR，可定位色彩通道级别的偏差。',
+        formula: 'PSNR_ch = 10·log₁₀(255² / MSE_ch)',
+        grades: [
+          { t:'≥ 40 dB', l:'通道质量优秀', c:'good' },
+          { t:'≥ 30 dB', l:'通道质量良好', c:'good' },
+          { t:'< 30 dB', l:'有明显色彩偏差', c:'warn' },
+        ],
+      },
+      mse: {
+        name: 'MSE · 均方误差（Luma）',
+        desc: '所有像素 Luma 差值平方的均值，对较大误差更敏感（平方放大效应）。越接近 0 越好。',
+        formula: 'MSE = (1/N) · Σ (Aᵢ − Bᵢ)²',
+        grades: [
+          { t:'= 0',  l:'完全相同', c:'good' },
+          { t:'越小', l:'差异越小', c:''     },
+        ],
+      },
+      rmse: {
+        name: 'RMSE · 均方根误差（Luma）',
+        desc: 'MSE 的平方根，量纲与像素值相同（0–255），更直观反映平均误差幅度。',
+        formula: 'RMSE = √MSE',
+        grades: [
+          { t:'= 0',  l:'完全相同', c:'good' },
+          { t:'越小', l:'差异越小', c:''     },
+        ],
+      },
+      mae: {
+        name: 'MAE · 平均绝对误差（Luma）',
+        desc: '像素 Luma 差值绝对值的均值，对离群值不敏感，比 RMSE 更稳健。',
+        formula: 'MAE = (1/N) · Σ |Aᵢ − Bᵢ|',
+        grades: [
+          { t:'= 0',  l:'完全相同', c:'good' },
+          { t:'越小', l:'差异越小', c:''     },
+        ],
+      },
+      hist: {
+        name: '直方图相关 · Histogram Correlation',
+        desc: 'R、G、B 三通道直方图 Pearson 相关系数的均值，衡量整体色调分布的一致程度。',
+        formula: 'ρ = Σ(hA−μA)(hB−μB) / √[Σ(hA−μA)²·Σ(hB−μB)²]',
+        grades: [
+          { t:'≥ 0.99', l:'色调分布高度一致', c:'good' },
+          { t:'≥ 0.95', l:'良好',             c:'good' },
+          { t:'≥ 0.90', l:'有一定色调偏差',   c:'warn' },
+          { t:'< 0.90', l:'色调差异明显',     c:'bad'  },
+        ],
+      },
+    };
+
+    const tipEl = document.getElementById('iqa-tip');
+    const qBar  = document.getElementById('quality-bar');
+    let activeKey = null;
+
+    function show(key, e) {
+      const d = TIPS[key];
+      if (!d) return;
+      activeKey = key;
+      tipEl.querySelector('.iqa-tip-name').textContent    = d.name;
+      tipEl.querySelector('.iqa-tip-desc').textContent    = d.desc;
+      tipEl.querySelector('.iqa-tip-formula').textContent = d.formula;
+      tipEl.querySelector('.iqa-tip-grades').innerHTML    = d.grades.map(g =>
+        `<div class="iqa-tip-grade ${g.c}"><div class="iqa-tip-dot"></div><span class="iqa-tip-thresh">${g.t}</span><span>${g.l}</span></div>`
+      ).join('');
+      tipEl.classList.add('visible');
+      reposition(e);
+    }
+
+    function reposition(e) {
+      const W = window.innerWidth, H = window.innerHeight;
+      const tw = tipEl.offsetWidth || 260, th = tipEl.offsetHeight || 180;
+      let x = e.clientX + 16, y = e.clientY - th - 10;
+      if (x + tw > W - 8) x = e.clientX - tw - 16;
+      if (y < 8) y = e.clientY + 22;
+      tipEl.style.left = x + 'px';
+      tipEl.style.top  = y + 'px';
+    }
+
+    function hide() { tipEl.classList.remove('visible'); activeKey = null; }
+
+    qBar.addEventListener('mouseover', e => {
+      const el = e.target.closest('[data-tip]');
+      if (el) { if (el.dataset.tip !== activeKey) show(el.dataset.tip, e); }
+      else hide();
+    });
+    qBar.addEventListener('mousemove', e => {
+      if (activeKey) reposition(e);
+    });
+    qBar.addEventListener('mouseleave', hide);
+  }
+
+  return { run, initTooltips };
+})();
+</script>
+
+<!-- ══════════════════════ JS MODULE 11: noise-chart.js ═════════════════ -->
+<script id="js-noise-chart">
+const NoiseChart = (() => {
+  // Colours for each channel line
+  const CH_STYLE = {
+    Y:   { stroke: 'rgba(0,229,160,0.9)',  fill: 'rgba(0,229,160,0.15)'  },
+    R:   { stroke: 'rgba(255,107,107,0.9)',fill: 'rgba(255,107,107,0.12)'},
+    G:   { stroke: 'rgba(81,207,102,0.9)', fill: 'rgba(81,207,102,0.12)' },
+    B:   { stroke: 'rgba(116,192,252,0.9)',fill: 'rgba(116,192,252,0.12)'},
+  };
+
+  let _cached = null;   // last computed data
+  let _channel = 'Y';  // active channel / 'ALL'
+
+  // ── Compute variance of (A−B) per luma bin for all channels ──
+  function compute() {
+    const { s } = State;
+    if (!s.dataA || !s.dataB) return null;
+
+    const adA = s.dataA.data, adB = s.dataB.data;
+    const w = Math.min(s.dataA.width, s.dataB.width);
+    const h = Math.min(s.dataA.height, s.dataB.height);
+    const wA = s.dataA.width, wB = s.dataB.width;
+
+    // For each channel: sum1[L]=Σdiff, sum2[L]=Σdiff², cnt[L]=count
+    const channels = ['Y','R','G','B'];
+    const data = {};
+    channels.forEach(ch => {
+      data[ch] = { sum1: new Float64Array(256), sum2: new Float64Array(256), cnt: new Int32Array(256) };
+    });
+
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const iA = (y * wA + x) * 4;
+        const iB = (y * wB + x) * 4;
+        const rA = adA[iA], gA = adA[iA+1], bA = adA[iA+2];
+        const rB = adB[iB], gB = adB[iB+1], bB = adB[iB+2];
+        const lumaA = Math.round(0.2126*rA + 0.7152*gA + 0.0722*bA);
+
+        const diffs = {
+          Y: (0.2126*rA + 0.7152*gA + 0.0722*bA) - (0.2126*rB + 0.7152*gB + 0.0722*bB),
+          R: rA - rB,
+          G: gA - gB,
+          B: bA - bB,
+        };
+
+        channels.forEach(ch => {
+          const d = data[ch], diff = diffs[ch];
+          d.sum1[lumaA] += diff;
+          d.sum2[lumaA] += diff * diff;
+          d.cnt[lumaA]++;
+        });
+      }
+    }
+
+    // Build variance arrays
+    const result = {};
+    channels.forEach(ch => {
+      const d = data[ch];
+      const v = new Float64Array(256);
+      for (let L = 0; L < 256; L++) {
+        if (d.cnt[L] < 2) { v[L] = NaN; continue; }
+        const mean = d.sum1[L] / d.cnt[L];
+        v[L] = d.sum2[L] / d.cnt[L] - mean * mean;
+      }
+      result[ch] = { variances: v, cnt: d.cnt };
+    });
+    return result;
+  }
+
+  // ── Draw chart for the given channels list ──
+  function draw(allData, channels) {
+    const canvas = document.getElementById('noise-canvas');
+    const dpr = window.devicePixelRatio || 1;
+    const W = canvas.offsetWidth || 700;
+    const H = canvas.offsetHeight || 260;
+    canvas.width  = Math.round(W * dpr);
+    canvas.height = Math.round(H * dpr);
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+
+    const PAD_L = 58, PAD_R = 18, PAD_T = 18, PAD_B = 48;
+    const cW = W - PAD_L - PAD_R;
+    const cH = H - PAD_T - PAD_B;
+
+    // Background
+    ctx.fillStyle = '#0a0a0f';
+    ctx.fillRect(0, 0, W, H);
+
+    // Find global max variance across selected channels (ignore sparse bins)
+    let maxV = 0;
+    channels.forEach(ch => {
+      const { variances, cnt } = allData[ch];
+      for (let L = 0; L < 256; L++) {
+        if (cnt[L] >= 8 && !isNaN(variances[L]) && variances[L] > maxV) maxV = variances[L];
+      }
+    });
+    if (maxV < 1) maxV = 1;
+    // Round maxV up to a clean number
+    const mag = Math.pow(10, Math.floor(Math.log10(maxV)));
+    const nice = [1, 2, 2.5, 5, 10];
+    for (const f of nice) { if (f * mag >= maxV) { maxV = f * mag; break; } }
+
+    // Y-axis grid + labels
+    const yTicks = 5;
+    for (let i = 0; i <= yTicks; i++) {
+      const y = PAD_T + cH - (i / yTicks) * cH;
+      const val = (maxV * i / yTicks);
+
+      ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(PAD_L, y); ctx.lineTo(PAD_L + cW, y); ctx.stroke();
+
+      ctx.fillStyle = '#6a6a8a';
+      ctx.font = `9px JetBrains Mono, monospace`;
+      ctx.textAlign = 'right';
+      const label = val >= 100 ? val.toFixed(0) : val >= 10 ? val.toFixed(1) : val.toFixed(2);
+      ctx.fillText(label, PAD_L - 5, y + 3);
+    }
+
+    // X-axis grid + labels (every 32 luma steps)
+    for (let L = 0; L <= 256; L += 32) {
+      const x = PAD_L + (L / 255) * cW;
+      ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+      ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x, PAD_T); ctx.lineTo(x, PAD_T + cH); ctx.stroke();
+      ctx.fillStyle = '#6a6a8a';
+      ctx.font = '9px JetBrains Mono, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(L > 255 ? 255 : L, x, PAD_T + cH + 13);
+    }
+
+    // Axis lines
+    ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(PAD_L, PAD_T); ctx.lineTo(PAD_L, PAD_T + cH);
+    ctx.lineTo(PAD_L + cW, PAD_T + cH);
+    ctx.stroke();
+
+    // Luma gradient strip beneath X labels
+    const grd = ctx.createLinearGradient(PAD_L, 0, PAD_L + cW, 0);
+    grd.addColorStop(0, '#000'); grd.addColorStop(1, '#fff');
+    ctx.fillStyle = grd;
+    ctx.fillRect(PAD_L, PAD_T + cH + 20, cW, 7);
+    ctx.strokeStyle = 'rgba(255,255,255,0.08)';
+    ctx.lineWidth = 0.5;
+    ctx.strokeRect(PAD_L, PAD_T + cH + 20, cW, 7);
+
+    // Axis labels
+    ctx.fillStyle = '#5a5a7a';
+    ctx.font = '9px Syne, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('Luma (0–255)', PAD_L + cW / 2, H - 3);
+
+    ctx.save();
+    ctx.translate(11, PAD_T + cH / 2);
+    ctx.rotate(-Math.PI / 2);
+    ctx.textAlign = 'center';
+    ctx.fillText('方差 (Variance)', 0, 0);
+    ctx.restore();
+
+    // Draw each channel: area fill then line
+    channels.forEach(ch => {
+      const { variances, cnt } = allData[ch];
+      const style = CH_STYLE[ch];
+
+      // Build path (skip NaN / sparse bins)
+      const pts = [];
+      for (let L = 0; L < 256; L++) {
+        if (cnt[L] >= 8 && !isNaN(variances[L])) {
+          pts.push({ L, v: variances[L] });
+        }
+      }
+      if (pts.length < 2) return;
+
+      // Area fill
+      ctx.beginPath();
+      ctx.moveTo(PAD_L + (pts[0].L / 255) * cW, PAD_T + cH);
+      pts.forEach(p => ctx.lineTo(PAD_L + (p.L / 255) * cW, PAD_T + cH - (p.v / maxV) * cH));
+      ctx.lineTo(PAD_L + (pts[pts.length-1].L / 255) * cW, PAD_T + cH);
+      ctx.closePath();
+      ctx.fillStyle = style.fill;
+      ctx.fill();
+
+      // Line
+      ctx.beginPath();
+      pts.forEach((p, i) => {
+        const x = PAD_L + (p.L / 255) * cW;
+        const y = PAD_T + cH - (p.v / maxV) * cH;
+        i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      });
+      ctx.strokeStyle = style.stroke;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    });
+
+    // Peak annotation for primary channel
+    const primary = allData[channels[0]];
+    let peakL = 0, peakV = 0;
+    for (let L = 0; L < 256; L++) {
+      if (primary.cnt[L] >= 8 && !isNaN(primary.variances[L]) && primary.variances[L] > peakV) {
+        peakV = primary.variances[L]; peakL = L;
+      }
+    }
+    if (peakV > 0) {
+      const px = PAD_L + (peakL / 255) * cW;
+      const py = PAD_T + cH - (peakV / maxV) * cH;
+      ctx.strokeStyle = CH_STYLE[channels[0]].stroke;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px, PAD_T + cH); ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = CH_STYLE[channels[0]].stroke;
+      ctx.beginPath(); ctx.arc(px, py, 3, 0, Math.PI*2); ctx.fill();
+      document.getElementById('noise-peak-text').textContent =
+        `峰值方差: ${peakV.toFixed(2)}  @  Luma = ${peakL}`;
+    }
+  }
+
+  function refresh() {
+    if (!_cached) return;
+    const channels = _channel === 'ALL' ? ['Y','R','G','B'] : [_channel];
+    draw(_cached, channels);
+  }
+
+  function open() {
+    const { s } = State;
+    if (!s.dataA || !s.dataB) { Utils.toast('请先加载两张图片'); return; }
+    _cached = compute();
+    document.getElementById('noise-modal').classList.add('visible');
+    // Defer draw until layout is complete
+    requestAnimationFrame(() => requestAnimationFrame(refresh));
+  }
+
+  function init() {
+    document.getElementById('btn-noise-chart').addEventListener('click', open);
+    document.getElementById('noise-close').addEventListener('click', () => {
+      document.getElementById('noise-modal').classList.remove('visible');
+    });
+    // Click backdrop to close
+    document.getElementById('noise-modal').addEventListener('click', e => {
+      if (e.target.id === 'noise-modal')
+        document.getElementById('noise-modal').classList.remove('visible');
+    });
+    // Channel toggle buttons
+    document.querySelectorAll('.noise-ch-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.noise-ch-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        _channel = btn.dataset.ch;
+        refresh();
+      });
+    });
+    // Redraw on window resize while open
+    window.addEventListener('resize', () => {
+      if (document.getElementById('noise-modal').classList.contains('visible')) refresh();
+    });
+  }
+
+  return { init };
+})();
+</script>
+
+<!-- ═══════════════════════ JS MODULE 13: raw.js ════════════════════════ -->
+<script id="js-raw">
+const Raw = (() => {
+  // ── Bayer pattern: returns channel 'R'|'G'|'B' at (x,y) ──
+  // Layout of 2×2 tile: [TL, TR, BL, BR]
+  const PAT = {
+    RGGB:['R','G','G','B'], GRBG:['G','R','B','G'],
+    GBRG:['G','B','R','G'], BGGR:['B','G','G','R'],
+  };
+  function chAt(x, y, pat) { return PAT[pat][(y & 1) * 2 + (x & 1)]; }
+
+  // ── Demosaic + AWB: ArrayBuffer → ImageData ──
+  function process(buf, w, h, bitDepth, le, pat, gains, dgain, gamma) {
+    const maxVal   = (1 << bitDepth) - 1;
+    const view     = new DataView(buf);
+    const u16      = bitDepth > 8;
+    const dg       = (dgain > 0) ? dgain : 1;
+    const gammaInv = (gamma  > 0) ? (1 / gamma) : 1;
+
+    // Build gain-applied float array (digital gain × AWB channel gain, clamped 0..1)
+    const rawF = new Float32Array(w * h);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = y * w + x;
+        const v = u16 ? view.getUint16(i * 2, le) : view.getUint8(i);
+        const ch = chAt(x, y, pat);
+        let f = (v / maxVal) * dg;
+        f *= (ch === 'R') ? gains.r : (ch === 'B') ? gains.b : gains.g;
+        rawF[i] = f > 1 ? 1 : f < 0 ? 0 : f;
+      }
+    }
+
+    // Bilinear demosaicing
+    const out = new ImageData(w, h);
+    const od  = out.data;
+    const get = (x, y) => {
+      if (x < 0) x = 0; else if (x >= w) x = w - 1;
+      if (y < 0) y = 0; else if (y >= h) y = h - 1;
+      return rawF[y * w + x];
+    };
+
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const ch = chAt(x, y, pat);
+        let r, g, b;
+        if (ch === 'R') {
+          r = get(x, y);
+          g = (get(x-1,y) + get(x+1,y) + get(x,y-1) + get(x,y+1)) * 0.25;
+          b = (get(x-1,y-1) + get(x+1,y-1) + get(x-1,y+1) + get(x+1,y+1)) * 0.25;
+        } else if (ch === 'B') {
+          b = get(x, y);
+          g = (get(x-1,y) + get(x+1,y) + get(x,y-1) + get(x,y+1)) * 0.25;
+          r = (get(x-1,y-1) + get(x+1,y-1) + get(x-1,y+1) + get(x+1,y+1)) * 0.25;
+        } else {
+          // G: determine whether R is horizontal or vertical
+          g = get(x, y);
+          if (chAt(x + 1, y, pat) === 'R') {
+            r = (get(x-1,y) + get(x+1,y)) * 0.5;
+            b = (get(x,y-1) + get(x,y+1)) * 0.5;
+          } else {
+            b = (get(x-1,y) + get(x+1,y)) * 0.5;
+            r = (get(x,y-1) + get(x,y+1)) * 0.5;
+          }
+        }
+        const io = (y * w + x) * 4;
+        // Apply gamma after demosaic; gammaInv=1/gamma (gammaInv=1 → linear, 1/2.2 → sRGB-like)
+        od[io]   = (Math.pow(r > 1 ? 1 : r, gammaInv) * 255 + 0.5) | 0;
+        od[io+1] = (Math.pow(g > 1 ? 1 : g, gammaInv) * 255 + 0.5) | 0;
+        od[io+2] = (Math.pow(b > 1 ? 1 : b, gammaInv) * 255 + 0.5) | 0;
+        od[io+3] = 255;
+      }
+    }
+    return out;
+  }
+
+  // ── Gray-point AWB: sample Bayer values around (cx,cy), return gains ──
+  function calcGrayGains(buf, w, h, bitDepth, le, pat, cx, cy) {
+    const radius = 8;
+    const maxVal = (1 << bitDepth) - 1;
+    const view   = new DataView(buf);
+    const u16    = bitDepth > 8;
+    let sR=0,cR=0, sG=0,cG=0, sB=0,cB=0;
+    for (let dy = -radius; dy <= radius; dy++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        const nx = cx + dx, ny = cy + dy;
+        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+        const v = (u16 ? view.getUint16((ny*w+nx)*2, le) : view.getUint8(ny*w+nx)) / maxVal;
+        const ch = chAt(nx, ny, pat);
+        if      (ch==='R'){sR+=v;cR++;} else if(ch==='B'){sB+=v;cB++;} else{sG+=v;cG++;}
+      }
+    }
+    if (!cR||!cG||!cB) return null;
+    const aR=sR/cR, aG=sG/cG, aB=sB/cB;
+    if (aR<0.01||aG<0.01||aB<0.01) return null;
+    return { r: aG/aR, g: 1.0, b: aG/aB };
+  }
+
+  // ── Helpers ──
+  function getRaw(side) { return side==='a' ? State.s.rawA : State.s.rawB; }
+  function setRaw(side, v) { if(side==='a') State.s.rawA=v; else State.s.rawB=v; }
+
+  // Convert ImageData → canvas dataURL → set img src; return dataURL
+  function toDataURL(data, w, h) {
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    c.getContext('2d').putImageData(data, 0, 0);
+    return c.toDataURL();
+  }
+
+  // Reprocess one side after config change, re-run pipeline
+  function reprocess(side) {
+    const raw = getRaw(side);
+    if (!raw) return;
+    const { s } = State;
+    const data = process(raw.buf, raw.w, raw.h, raw.bitDepth, raw.le, raw.pat, raw.gains, raw.dgain, raw.gamma);
+    if (side==='a') s.dataA=data; else s.dataB=data;
+
+    const url = toDataURL(data, raw.w, raw.h);
+    document.getElementById('img-'+side).src = url;
+    const img = new Image();
+    img.onload = () => { if(side==='a') s.imgA=img; else s.imgB=img; Slider.refresh(); };
+    img.src = url;
+
+    if (s.dataA && s.dataB) {
+      DiffEngine.run(); IQAEngine.run(); Render.all(); Stats.update(); Stats.updateIQA();
+    }
+  }
+
+  // ── State for dialog & gray-point picker ──
+  let _pendingSide = null;
+  let _pendingBuf  = null;
+  let _grayPicking = null; // 'a' | 'b' | null
+
+  // ── loadRaw: called by Loader when .raw file detected ──
+  function loadRaw(file, side) {
+    _pendingSide = side;
+    document.getElementById('raw-side-label').textContent = side.toUpperCase();
+    document.getElementById('raw-modal').classList.add('visible');
+    const reader = new FileReader();
+    reader.onload = e => { _pendingBuf = e.target.result; };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function _confirmSetup() {
+    if (!_pendingBuf) { Utils.toast('文件尚未读取完毕，请稍候'); return; }
+    const w   = parseInt(document.getElementById('raw-cfg-w').value);
+    const h   = parseInt(document.getElementById('raw-cfg-h').value);
+    const bd  = parseInt(document.getElementById('raw-cfg-bits').value);
+    const le  = document.querySelector('input[name="raw-endian"]:checked').value === 'le';
+    const pat = (document.querySelector('.raw-pat.active') || {}).dataset.pat || 'RGGB';
+
+    if (!w || !h) { Utils.toast('请输入有效的宽度和高度'); return; }
+    const expected = w * h * (bd <= 8 ? 1 : 2);
+    if (_pendingBuf.byteLength < expected) {
+      Utils.toast(`文件大小 (${_pendingBuf.byteLength}B) 小于预期 (${expected}B)，请检查配置`);
+      return;
+    }
+
+    const side = _pendingSide;
+    const raw  = { buf: _pendingBuf, w, h, bitDepth: bd, le, pat, gains: {r:1,g:1,b:1}, dgain: 1, gamma: 1 };
+    setRaw(side, raw);
+    document.getElementById('raw-modal').classList.remove('visible');
+    _pendingBuf = null; _pendingSide = null;
+
+    // Show controls
+    document.getElementById('raw-bar').classList.add('visible');
+    document.getElementById('raw-awb-'+side).style.display = 'flex';
+    ['r','g','b'].forEach(ch => { document.getElementById('raw-'+ch+'-'+side).value = '1.000'; });
+    document.getElementById('raw-dg-'+side).value  = '1.00';
+    document.getElementById('raw-gm-'+side).value  = '1.0';
+
+    // Process and apply
+    const { s } = State;
+    const data = process(raw.buf, w, h, bd, le, pat, raw.gains, raw.dgain, raw.gamma);
+    if (side==='a') s.dataA=data; else s.dataB=data;
+
+    const url = toDataURL(data, w, h);
+    const img = new Image();
+    img.onload = () => {
+      if (side==='a') { s.imgA=img; } else { s.imgB=img; }
+      const imgEl = document.getElementById('img-'+side);
+      imgEl.src = url;
+      imgEl.classList.remove('hidden');
+      document.getElementById('prompt-'+side).classList.add('hidden');
+      document.getElementById('info-'+side).textContent = `${w}×${h} · RAW ${bd}bit`;
+      if (s.dataA && s.dataB) {
+        DiffEngine.run(); IQAEngine.run(); Render.all(); Stats.update(); Stats.updateIQA();
+        Probe.show(); Slider.refresh();
+      }
+    };
+    img.src = url;
+  }
+
+  // ── Gray-point picker ──
+  function _startGrayPick(side) {
+    if (_grayPicking === side) { _stopGrayPick(); return; }
+    _stopGrayPick();
+    _grayPicking = side;
+    document.getElementById('raw-gray-'+side).classList.add('picking');
+    const viewEl = document.getElementById('view-'+side);
+    // Show cursor hint
+    let hint = viewEl.querySelector('.raw-pick-hint');
+    if (!hint) {
+      hint = document.createElement('div');
+      hint.className = 'raw-pick-hint';
+      hint.textContent = '点击图像中的灰点 / Esc 取消';
+      viewEl.style.position = 'relative';
+      viewEl.appendChild(hint);
+    }
+    hint.classList.add('visible');
+    viewEl.style.cursor = 'crosshair';
+
+    viewEl._rawPick = function(e) {
+      const imgEl = document.getElementById('img-'+side);
+      if (!imgEl.naturalWidth) return;
+      const rect = imgEl.getBoundingClientRect();
+      const raw  = getRaw(side);
+      if (!raw) return;
+      const rx = Math.round((e.clientX - rect.left) * (raw.w / rect.width));
+      const ry = Math.round((e.clientY - rect.top)  * (raw.h / rect.height));
+      const gains = calcGrayGains(raw.buf, raw.w, raw.h, raw.bitDepth, raw.le, raw.pat, rx, ry);
+      if (!gains) { Utils.toast('所选区域过暗，请选择较亮的灰色区域'); return; }
+      raw.gains = gains;
+      document.getElementById('raw-r-'+side).value = gains.r.toFixed(3);
+      document.getElementById('raw-g-'+side).value = gains.g.toFixed(3);
+      document.getElementById('raw-b-'+side).value = gains.b.toFixed(3);
+      _stopGrayPick();
+      reprocess(side);
+      Utils.toast(`灰点 AWB — R:${gains.r.toFixed(3)}  G:${gains.g.toFixed(3)}  B:${gains.b.toFixed(3)}`);
+    };
+    viewEl.addEventListener('click', viewEl._rawPick);
+  }
+
+  function _stopGrayPick() {
+    if (!_grayPicking) return;
+    const side = _grayPicking;
+    _grayPicking = null;
+    document.getElementById('raw-gray-'+side).classList.remove('picking');
+    const viewEl = document.getElementById('view-'+side);
+    viewEl.style.cursor = '';
+    const hint = viewEl.querySelector('.raw-pick-hint');
+    if (hint) hint.classList.remove('visible');
+    if (viewEl._rawPick) {
+      viewEl.removeEventListener('click', viewEl._rawPick);
+      viewEl._rawPick = null;
+    }
+  }
+
+  // ── init: wire up all UI events ──
+  function init() {
+    // Setup dialog
+    document.getElementById('raw-cfg-ok').addEventListener('click', _confirmSetup);
+    document.getElementById('raw-cfg-cancel').addEventListener('click', () => {
+      document.getElementById('raw-modal').classList.remove('visible');
+      _pendingBuf = null; _pendingSide = null;
+    });
+
+    // Pattern tabs (update all loaded RAW sides)
+    document.querySelectorAll('.raw-pat').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.raw-pat').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        ['a','b'].forEach(side => {
+          const raw = getRaw(side);
+          if (raw) { raw.pat = btn.dataset.pat; reprocess(side); }
+        });
+      });
+    });
+
+    // AWB gain inputs and gray-point / reset per side
+    ['a','b'].forEach(side => {
+      ['r','g','b'].forEach(ch => {
+        document.getElementById(`raw-${ch}-${side}`).addEventListener('change', () => {
+          const raw = getRaw(side);
+          if (!raw) return;
+          raw.gains[ch] = parseFloat(document.getElementById(`raw-${ch}-${side}`).value) || 1;
+          reprocess(side);
+        });
+      });
+      document.getElementById('raw-dg-'+side).addEventListener('change', () => {
+        const raw = getRaw(side); if (!raw) return;
+        raw.dgain = parseFloat(document.getElementById('raw-dg-'+side).value) || 1;
+        reprocess(side);
+      });
+      document.getElementById('raw-gm-'+side).addEventListener('change', () => {
+        const raw = getRaw(side); if (!raw) return;
+        raw.gamma = parseFloat(document.getElementById('raw-gm-'+side).value) || 1;
+        reprocess(side);
+      });
+      document.getElementById('raw-gray-'+side).addEventListener('click', () => _startGrayPick(side));
+      document.getElementById('raw-reset-'+side).addEventListener('click', () => {
+        const raw = getRaw(side);
+        if (!raw) return;
+        raw.gains = {r:1,g:1,b:1}; raw.dgain = 1; raw.gamma = 1;
+        ['r','g','b'].forEach(ch => document.getElementById(`raw-${ch}-${side}`).value = '1.000');
+        document.getElementById('raw-dg-'+side).value = '1.00';
+        document.getElementById('raw-gm-'+side).value = '1.0';
+        reprocess(side);
+      });
+    });
+
+    document.addEventListener('keydown', e => { if (e.key==='Escape' && _grayPicking) _stopGrayPick(); });
+  }
+
+  return { init, loadRaw };
+})();
+</script>
+
 <!-- ═══════════════════════ JS MODULE 9: app.js ══════════════════════════ -->
 <script id="js-app">
 (function initApp(){
-  Loader.init();Slider.init();SplitterCtrl.init();Utils.init();Utils.initWheel();Probe.init();
+  Loader.init();Slider.init();SplitterCtrl.init();Utils.init();Utils.initWheel();Probe.init();NoiseChart.init();IQAEngine.initTooltips();Raw.init();
   const{s}=State,$=id=>document.getElementById(id);
   $('tol-slider').addEventListener('input',e=>{s.tolerance=+e.target.value;$('tol-val').textContent=e.target.value;triggerDiff();});
   $('overlay-opacity').addEventListener('input',e=>{s.overlayOpacity=e.target.value/100;$('ov-val').textContent=e.target.value+'%';triggerDiff();});
@@ -1064,7 +2153,7 @@ const Probe = (() => {
     const d=e.key==='ArrowUp'?1:e.key==='ArrowDown'?-1:0;if(!d)return;
     const v=Math.max(0,Math.min(255,s.tolerance+d));s.tolerance=v;$('tol-slider').value=v;$('tol-val').textContent=v;triggerDiff();
   });
-  function triggerDiff(){if(s.dataA&&s.dataB){DiffEngine.run();Render.all();Stats.update();}}
+  function triggerDiff(){if(s.dataA&&s.dataB){DiffEngine.run();IQAEngine.run();Render.all();Stats.update();Stats.updateIQA();}}
   function setMode(m){
     s.mode=m;
     const tr=document.getElementById('top-row'),pA=$('panel-a'),pB=$('panel-b'),pS=$('panel-slider');
